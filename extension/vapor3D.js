@@ -3,7 +3,7 @@
 // Description: 3D Engine for Turbowarp
 // By: Joy_Ful <https://github.com/JoyFul721>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.2.0 - Added Irradiance Map support
+// Version: 1.3.0 - Stencil Logic & Remote Asset Unpacking
 
 (function (Scratch) {
   "use strict";
@@ -29,6 +29,7 @@
     powerPreference: 'high-performance'
   });
 
+
   const debugInfo = gl3d.getExtension('WEBGL_debug_renderer_info');
   if (debugInfo) {
     const vendor = gl3d.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
@@ -48,13 +49,6 @@
   const rbos = [];
 
   const vectors = new Map();
-
-
-  function updateCanvasSize() {
-    canvas3d.width = renderer.canvas.width;
-    canvas3d.height = renderer.canvas.height;
-    if (gl3d) gl3d.viewport(0, 0, canvas3d.width, canvas3d.height);
-  }
 
   function initCanvasOverlay() {
     const mainCanvas = renderer.canvas;
@@ -173,6 +167,33 @@
   // ==========================================
   // 通用
   // ==========================================
+
+  const fetchBinaryData = async (url) => {
+    if (!url || typeof url !== 'string') throw new Error('Invalid URL');
+
+    // DataURL
+    if (url.startsWith('data:')) {
+      const parts = url.split(',');
+      const b64 = parts.pop();
+      const binStr = atob(b64);
+      const bytes = new Uint8Array(binStr.length);
+      for (let i = 0; i < binStr.length; i++) {
+        bytes[i] = binStr.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    //  HTTP(S) 或 Blob URL
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+      const buffer = await response.arrayBuffer();
+      return new Uint8Array(buffer);
+    } catch (e) {
+      console.error('Binary fetch error:', e);
+      throw e;
+    }
+  };
 
   const _parseInput = (input, util) => {
     if (typeof input === "string" && input.startsWith("[")) {
@@ -330,7 +351,7 @@
     }
 
     const dv = new DataView(buffer);
-    // 2. 确定字节序 0x04030201 小端
+    // 确定字节序 0x04030201 小端
     const littleEndian = dv.getUint32(12, true) === 0x04030201;
 
     const glType = dv.getUint32(16, littleEndian);
@@ -428,13 +449,13 @@
   };
 
   // ==========================================
-  // 核心
+  // Vapor3D
   // ==========================================
   class Vapor3D {
     getInfo() {
       return {
         id: "vapor3D",
-        name: "Vapor 3D",
+        name: "Vapor3D",
         color1: "#2f2f36",
         blocks: [
           { opcode: "gl_Init", blockType: "command", text: "init WebGL" },
@@ -503,6 +524,7 @@
 
           { opcode: "vao_CreateScreenQuad", blockType: "command", text: "Init RenderQuad [ID]", arguments: { ID: { type: "string", defaultValue: "screenQuad" } } },
           { opcode: "vao_CreateCube", blockType: "command", text: "Init Cube [ID]", arguments: { ID: { type: "string", defaultValue: "cube" } } },
+          { opcode: "vao_CreateSphere", blockType: "command", text: "Init RenderSphere [ID] Lat [LAT] Lon [LON]", arguments: {ID: { type: "string", defaultValue: "lightSphere" },LAT: { type: "number", defaultValue: 16 },LON: { type: "number", defaultValue: 16 }}},
           {
             opcode: "vao_CreateCustom",
             blockType: "command",
@@ -550,12 +572,21 @@
             }
           },
           {
-            opcode: "tex_LoadKTXFromBase64",
+            opcode: "tex_LoadFromBuffer",
             blockType: "command",
-            text: "load KTX Cubemap [NAME] from Base64 [B64]",
+            text: "load texture [NAME] from registry ID [ID]",
+            arguments: {
+              NAME: { type: "string", defaultValue: "tex1" },
+              ID: { type: "string", defaultValue: "" }
+            }
+          },
+          {
+            opcode: "tex_LoadKTXFromURL",
+            blockType: "command",
+            text: "load KTX cubemap [NAME] from URL [U]",
             arguments: {
               NAME: { type: "string", defaultValue: "prefilterMap" },
-              B64: { type: "string" }
+              U: { type: "string" }
             }
           },
           {
@@ -623,14 +654,46 @@
           { blockType: "label", text: "GL States" },
           { opcode: "st_Enable", blockType: "command", text: "glEnable [CAP]", arguments: { CAP: { type: "string", menu: "capMenu" } } },
           { opcode: "st_Disable", blockType: "command", text: "glDisable [CAP]", arguments: { CAP: { type: "string", menu: "capMenu" } } },
-          
+
+          "---",
+          { opcode: "st_CullFace", blockType: "command", text: "glCullFace [MODE]", arguments: { MODE: { type: "string", menu: "faceMenu", defaultValue: "BACK" } } },
+          "---",
+          { opcode: "st_ColorMask", blockType: "command", text: "glColorMask [STATE]", arguments: { STATE: { type: "string", menu: "boolMenu", } } },
+
           "---",
           { opcode: "st_DepthMask", blockType: "command", text: "glDepthMask [STATE]", arguments: { STATE: { type: "string", menu: "boolMenu", defaultValue: "true" } } },
-          { opcode: "st_DepthFunc", blockType: "command", text: "glDepthFunc [FUNC]", arguments: { FUNC: { type: "string", menu: "depthFuncMenu", defaultValue: "LESS" } } },
+          { opcode: "st_DepthFunc", blockType: "command", text: "glDepthFunc [FUNC]", arguments: { FUNC: { type: "string", menu: "funcMenu", defaultValue: "LESS" } } },
 
           "---",
-          { opcode: "st_StencilOp", blockType: "command", text: "glStencilOp [SF] [DF] [DP]", arguments: { SF: { type: "string", menu: "opMenu" }, DF: { type: "string", menu: "opMenu" }, DP: { type: "string", menu: "opMenu" } } },
-
+          {
+            opcode: "st_StencilMask",
+            blockType: "command",
+            text: "glStencilMask [MASK]",
+            arguments: {
+              MASK: { type: "number", defaultValue: 255 } // 255 => 0xFF
+            }
+          },
+          {
+            opcode: "st_StencilOp",
+            blockType: "command",
+            text: "glStencilOp [FACE] fail [SF] zfail [DF] zpass [DP]",
+            arguments: {
+              FACE: { type: "string", menu: "faceMenu", defaultValue: "FRONT_AND_BACK" },
+              SF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, // 模板测试失败
+              DF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, // 深度测试失败
+              DP: { type: "string", menu: "opMenu", defaultValue: "KEEP" }  // 深度测试通过
+            }
+          },
+          {
+            opcode: "st_StencilFunc",
+            blockType: "command",
+            text: "glStencilFunc [FUNC] ref [REF] mask [MASK]",
+            arguments: {
+              FUNC: { type: "string", menu: "funcMenu", defaultValue: "ALWAYS" },
+              REF: { type: "number", defaultValue: 0 },
+              MASK: { type: "number", defaultValue: 255 }
+            }
+          },
           
           "---",
           { blockType: "label", text: "Math" },
@@ -661,13 +724,14 @@
           },
           { opcode: "m4_Translate", blockType: "reporter", text: "glm::translate [M] [X] [Y] [Z]", arguments: { M: { type: "string" }, X: { type: "number" }, Y: { type: "number" }, Z: { type: "number" } } },
           { opcode: "m4_Rotate", blockType: "reporter", text: "glm::rotate [M] [AXIS] [DEG]", arguments: { M: { type: "string" }, AXIS: { type: "string", menu: "axisMenu" }, DEG: { type: "number" } } },
+          { opcode: "m4_Translate", blockType: "reporter", text: "glm::translate [M] [X] [Y] [Z]", arguments: { M: { type: "string" }, X: { type: "number" }, Y: { type: "number" }, Z: { type: "number" } } },
+          { opcode: "m4_Scale", blockType: "reporter", text: "glm::scale [M] X[X] Y[Y] Z[Z]", arguments: { M: { type: "string" }, X: { type: "number", defaultValue: 1 }, Y: { type: "number", defaultValue: 1 }, Z: { type: "number", defaultValue: 1 } } },
           { opcode: "m4_Multiply", blockType: "reporter", text: "glm:: [A] * [B]", arguments: { A: { type: "string" }, B: { type: "string" } } },
         ],
         menus: {
           clearMenu: ["COLOR_BUFFER_BIT", "DEPTH_BUFFER_BIT", "STENCIL_BUFFER_BIT", "ALL"],
           drawMode: ["TRIANGLES", "TRIANGLE_STRIP", "LINES", "POINTS"],
           capMenu: ["DEPTH_TEST", "STENCIL_TEST", "BLEND", "CULL_FACE"],
-          opMenu: ["KEEP", "ZERO", "REPLACE", "INCR", "INCR_WRAP", "DECR", "DECR_WRAP", "INVERT"],
           axisMenu: ["X", "Y", "Z"],
           v3OpMenu: ["+", "-", "mul"],
           v3CompMenu: ["X", "Y", "Z"],
@@ -685,7 +749,9 @@
           wrapAxis: ["S","T"],
           wrapMode: ["REPEAT","CLAMP_TO_EDGE","MIRRORED_REPEAT"],
           boolMenu: ["true", "false"],
-          depthFuncMenu: ["NEVER", "LESS", "EQUAL", "LEQUAL", "GREATER", "NOTEQUAL", "GEQUAL", "ALWAYS"],
+          funcMenu: ["NEVER", "LESS", "EQUAL", "LEQUAL", "GREATER", "NOTEQUAL", "GEQUAL", "ALWAYS"],
+          opMenu: { acceptReporters: true, items: [ { text: "KEEP", value: "KEEP" }, { text: "ZERO", value: "ZERO" }, { text: "REPLACE", value: "REPLACE" }, { text: "INCR", value: "INCR" }, { text: "DECR", value: "DECR" }, { text: "INVERT", value: "INVERT" }, { text: "INCR_WRAP", value: "INCR_WRAP" }, { text: "DECR_WRAP", value: "DECR_WRAP" } ] },
+          faceMenu: { acceptReporters: true, items: [ { text: "FRONT", value: "FRONT" }, { text: "BACK", value: "BACK" }, { text: "FRONT_AND_BACK", value: "FRONT_AND_BACK" } ] },
         }
       };
     }
@@ -937,6 +1003,60 @@
       vaos.set(ID, { vao, hasElements: false, defaultCount: 36 });
       gl3d.bindVertexArray(null);
     }
+    vao_CreateSphere(args) {
+      const ID = String(args.ID);
+      if (vaos.has(ID)) return;
+      const latBands = Math.max(3, parseInt(args.LAT) || 16);
+      const lonBands = Math.max(3, parseInt(args.LON) || 16);
+      const pos = [];
+      const indices = [];
+      for (let i = 0; i <= latBands; i++) {
+        const theta = (i * Math.PI) / latBands;
+        const sinTheta = Math.sin(theta);
+        const cosTheta = Math.cos(theta);
+
+        for (let j = 0; j <= lonBands; j++) {
+          const phi = (j * 2 * Math.PI) / lonBands;
+          const x = Math.cos(phi) * sinTheta;
+          const y = cosTheta;
+          const z = Math.sin(phi) * sinTheta;
+          pos.push(x, y, z);
+        }
+      }
+      for (let i = 0; i < latBands; i++) {
+        for (let j = 0; j < lonBands; j++) {
+          const first = i * (lonBands + 1) + j;
+          const second = first + lonBands + 1;
+
+          // 左上 -> 右上 -> 左下
+          indices.push(first, first + 1, second);
+          // 左下 -> 右上 -> 右下
+          indices.push(second, first + 1, second + 1);
+        }
+      }
+      const vao = gl3d.createVertexArray();
+      gl3d.bindVertexArray(vao);
+      const b = (d, l, s) => {
+        const buf = gl3d.createBuffer();
+        gl3d.bindBuffer(gl3d.ARRAY_BUFFER, buf);
+        gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(d), gl3d.STATIC_DRAW);
+        gl3d.enableVertexAttribArray(l);
+        gl3d.vertexAttribPointer(l, s, gl3d.FLOAT, false, 0, 0);
+        vbos.push(buf);
+      };
+      b(pos, 0, 3);
+      const ebo = gl3d.createBuffer();
+      gl3d.bindBuffer(gl3d.ELEMENT_ARRAY_BUFFER, ebo);
+      gl3d.bufferData(gl3d.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl3d.STATIC_DRAW);
+      vbos.push(ebo);
+      gl3d.bindVertexArray(null);
+      vaos.set(ID, {
+        vao,
+        hasElements: true,
+        defaultCount: indices.length,
+        elementType: gl3d.UNSIGNED_SHORT
+      });
+    }
     vao_CreateCustom({ ID, L0, S0, L1, S1, L2, S2, L3, S3, I }, util) {
       if (vaos.has(ID)) return;
 
@@ -992,27 +1112,27 @@
     gl_Draw({ ID, COUNT, MODE }) {
       const entry = vaos.get(ID);
       if (!entry) return;
-
       gl3d.bindVertexArray(entry.vao);
-
       let drawCount = COUNT;
-      if (COUNT === "" || COUNT === null || COUNT === -1 || COUNT === undefined) {
+      if (drawCount === "" || drawCount === null || drawCount === -1 || drawCount === undefined) {
         drawCount = entry.defaultCount;
       }
-
       if (entry.hasElements) {
-        gl3d.drawElements(gl3d[MODE], drawCount, gl3d.UNSIGNED_INT, 0);
+        gl3d.drawElements(
+          gl3d[MODE] || gl3d.TRIANGLES,
+          drawCount,
+          entry.elementType || gl3d.UNSIGNED_SHORT,
+          0
+        );
       } else {
-        gl3d.drawArrays(gl3d[MODE], 0, drawCount);
+        gl3d.drawArrays(gl3d[MODE] || gl3d.TRIANGLES, 0, drawCount);
       }
-
       gl3d.bindVertexArray(null);
     }
 
     gl_Present() {
       if (!gl3d) return;
 
-      // 同步物理分辨率
       const mainCanvas = renderer.canvas;
       if (canvas3d.width !== mainCanvas.width || canvas3d.height !== mainCanvas.height) {
         canvas3d.width = mainCanvas.width;
@@ -1020,16 +1140,52 @@
         gl3d.viewport(0, 0, canvas3d.width, canvas3d.height);
       }
 
-      // 强制执行所有待处理的 WebGL 指令
-      gl3d.flush();
-
-      // 告诉 Scratch 这一帧渲染完了
       runtime.requestRedraw();
+
+      // 通过 Promise 对齐显示器刷新率 (V-Sync)
+      // 让 TurboWarp 在执行完这个积木后暂停，等浏览器画完这一帧
+      return new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
     }
 
     st_Enable({ CAP }) { gl3d.enable(gl3d[CAP]); }
     st_Disable({ CAP }) { gl3d.disable(gl3d[CAP]); }
-    st_StencilOp({ SF, DF, DP }) { gl3d.stencilOp(gl3d[SF], gl3d[DF], gl3d[DP]); }
+    st_CullFace({ MODE }) {
+      if (!gl3d) return;
+      const mode = gl3d[MODE];
+      if (mode !== undefined) {
+        gl3d.cullFace(mode);
+      }
+    }
+    st_StencilOp(args) {
+      if (!gl3d) return;
+      const face = gl3d[args.FACE] || gl3d.FRONT_AND_BACK;
+      // 使用三元运算符或 nullish 合并， 防止跳过 0
+      const sfail = gl3d[args.SF] !== undefined ? gl3d[args.SF] : gl3d.KEEP;
+      const zfail = gl3d[args.DF] !== undefined ? gl3d[args.DF] : gl3d.KEEP;
+      const zpass = gl3d[args.DP] !== undefined ? gl3d[args.DP] : gl3d.KEEP;
+
+      gl3d.stencilOpSeparate(face, sfail, zfail, zpass);
+    }
+
+    st_StencilFunc(args) {
+      if (!gl3d) return;
+      const face = gl3d[args.FACE] || gl3d.FRONT_AND_BACK;
+      const func = gl3d[args.FUNC] || gl3d.ALWAYS;
+      const ref = (args.REF !== "" && !isNaN(args.REF)) ? parseInt(args.REF) : 0;
+      const mask = (args.MASK !== "" && !isNaN(args.MASK)) ? parseInt(args.MASK) : 0xFF;
+      gl3d.stencilFuncSeparate(face, func, ref, mask);
+    }
+    st_StencilMask({ MASK }) {
+      if (!gl3d) return;
+      const m = (MASK !== "" && !isNaN(MASK)) ? parseInt(MASK) : 0xFF;
+      gl3d.stencilMask(m);
+    }
+    st_ColorMask(args) {
+      const state = String(args.STATE) === "true";
+      gl3d.colorMask(state, state, state, state);
+    }
     st_DepthMask({ STATE }) {
       if (!gl3d) return;
       gl3d.depthMask(STATE === "true");
@@ -1164,14 +1320,15 @@
     }
     async tex_LoadFromURL({ U, NAME }) {
       if (textures.has(NAME)) return;
+      const urlString = String(U).trim();
+      if (!urlString) return;
 
       textures.set(NAME, "loading");
 
       try {
-        const response = await fetch(U);
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        const uint8Data = await fetchBinaryData(urlString);
 
-        const blob = await response.blob();
+        const blob = new Blob([uint8Data]);
 
         const bitmap = await createImageBitmap(blob, {
           premultiplyAlpha: 'none',
@@ -1197,22 +1354,68 @@
         console.error(`Vapor3D: Failed to load URL texture [${NAME}]:`, e);
       }
     }
-    async tex_LoadKTXFromBase64({ B64, NAME }) {
+    async tex_LoadFromBuffer({ NAME, ID }) {
+      if (textures.has(NAME) && textures.get(NAME) !== "loading") return;
+      if (!ID) return;
+
+      const registry = window.Vapor3D_Registry;
+      if (!registry || !registry.has(ID)) {
+        console.error(`Vapor3D: Global pool ID [${ID}] not found. It may not be loaded or has been flushed.`);
+        return;
+      }
+
+      textures.set(NAME, "loading");
+      const data = registry.get(ID);
+
+      try {
+        let blob;
+        if (data instanceof Uint8Array) {
+          blob = new Blob([data]);
+        } else if (typeof data === 'string') {
+          const response = await fetch(data);
+          blob = await response.blob();
+        } else {
+          throw new Error(`Vapor3D: Unsupported data type: "${String(url).substring(0, 20)}..."`);
+        }
+
+        const bitmap = await createImageBitmap(blob, {
+          premultiplyAlpha: 'none',
+          colorSpaceConversion: 'none'
+        });
+
+        const tex = gl3d.createTexture();
+        gl3d.bindTexture(gl3d.TEXTURE_2D, tex);
+
+        gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_WRAP_S, gl3d.REPEAT);
+        gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_WRAP_T, gl3d.REPEAT);
+        gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_MIN_FILTER, gl3d.LINEAR);
+        gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_MAG_FILTER, gl3d.LINEAR);
+
+        gl3d.texImage2D(gl3d.TEXTURE_2D, 0, gl3d.RGBA, gl3d.RGBA, gl3d.UNSIGNED_BYTE, bitmap);
+
+        bitmap.close();
+
+        textures.set(NAME, tex);
+        console.log(`Vapor3D: Texture [${NAME}] loaded from [${ID}] successfully.`);
+
+      } catch (e) {
+        textures.delete(NAME);
+        console.error(`Vapor3D: Failed to load Buffer texture [${NAME}]:`, e);
+      }
+    }
+    async tex_LoadKTXFromURL({ U, NAME }) {
       if (textures.has(NAME)) return;
-      const b64String = String(B64).trim();
-      if (!b64String) return;
+      const urlString = String(U).trim();
+      if (!urlString) return;
 
       textures.set(NAME, "loading");
 
       try {
-        const cleanB64 = b64String.includes(',') ? b64String.split(',')[1] : b64String;
-        const response = await fetch(`data:application/octet-stream;base64,${cleanB64}`);
-        const buffer = await response.arrayBuffer();
+        const uint8Data = await fetchBinaryData(urlString);
+        // 获取 ArrayBuffer 传给解析器
+        const buffer = uint8Data.buffer;
 
         const ktx = _parseKTX(buffer);
-        if (ktx.mipmaps && ktx.mipmaps[0]) {
-          console.log(`Vapor3D Debug: Mip0 Face0 first 10 values:`, ktx.mipmaps[0].data.slice(0, 10));
-        }
 
         const tex = gl3d.createTexture();
         gl3d.bindTexture(gl3d.TEXTURE_CUBE_MAP, tex);
@@ -1220,10 +1423,8 @@
         // 强制 4 字节对齐
         gl3d.pixelStorei(gl3d.UNPACK_ALIGNMENT, 4);
 
-
         ktx.mipmaps.forEach(mip => {
           const target = gl3d.TEXTURE_CUBE_MAP_POSITIVE_X + mip.face;
-
           gl3d.texImage2D(
             target,
             mip.level,
@@ -1237,10 +1438,7 @@
           );
         });
 
-        gl3d.bindTexture(gl3d.TEXTURE_CUBE_MAP, tex);
-
         const mipCount = ktx.numberOfMipmapLevels;
-
         gl3d.texParameteri(gl3d.TEXTURE_CUBE_MAP, gl3d.TEXTURE_MAX_LEVEL, mipCount - 1);
 
         const minFilter = (mipCount > 1) ? gl3d.LINEAR_MIPMAP_LINEAR : gl3d.LINEAR;
@@ -1252,7 +1450,7 @@
         gl3d.texParameteri(gl3d.TEXTURE_CUBE_MAP, gl3d.TEXTURE_WRAP_R, gl3d.CLAMP_TO_EDGE);
 
         textures.set(NAME, tex);
-        console.log(`Vapor3D: KTX [${NAME}] Loaded.`);
+        console.log(`Vapor3D: KTX Cubemap [${NAME}] loaded successfully.`);
       } catch (e) {
         textures.delete(NAME);
         console.error(`Vapor3D: KTX Load Error:`, e);
@@ -1269,24 +1467,20 @@
     m4_Identity() {
       return JSON.stringify(m4.identity());
     }
-
     m4_Perspective({ F, A, N, F2 }) {
       const mat = m4.perspective(F * Math.PI / 180, A, N, F2);
       return JSON.stringify(mat);
     }
-
     m4_LookAt({ EX, EY, EZ, TX, TY, TZ, UX, UY, UZ }) {
       const mat = m4.lookAt([EX, EY, EZ], [TX, TY, TZ], [UX, UY, UZ]);
       return JSON.stringify(mat);
     }
-
     m4_Translate({ M, X, Y, Z }, util) {
       // _parseInput 会处理 M 是嵌套积木传来的 JSON 还是列表名
       const baseMat = _parseInput(M, util) || m4.identity();
       const mat = m4.translate(baseMat, X, Y, Z);
       return JSON.stringify(mat);
     }
-
     m4_Rotate({ M, AXIS, DEG }, util) {
       const baseMat = _parseInput(M, util) || m4.identity();
       const rad = DEG * Math.PI / 180;
@@ -1296,14 +1490,20 @@
       else mat = m4.zRotate(baseMat, rad); // Z 轴
       return JSON.stringify(mat);
     }
-
+    m4_Scale({ M, X, Y, Z }, util) {
+      const baseMat = _parseInput(M, util) || m4.identity();
+      const sx = (X === "" || X === null) ? 1 : Number(X);
+      const sy = (Y === "" || Y === null) ? 1 : Number(Y);
+      const sz = (Z === "" || Z === null) ? 1 : Number(Z);
+      const mat = m4.scale(baseMat, sx, sy, sz);
+      return JSON.stringify(mat);
+    }
     m4_Multiply({ A, B }, util) {
       const matA = _parseInput(A, util) || m4.identity();
       const matB = _parseInput(B, util) || m4.identity();
       const mat = m4.multiply(matA, matB);
       return JSON.stringify(mat);
     }
-
     // 没写，留在这
     m4_Inverse({ M }, util) {
       const baseMat = _parseInput(M, util) || m4.identity();
@@ -1314,7 +1514,6 @@
     v3_Init({ ID, X, Y, Z }) {
       vectors.set(ID, [X, Y, Z]);
     }
-
     v3_Modify({ ID, OP, OTHER }) {
       const a = vectors.get(ID);
       const b = vectors.get(OTHER);
@@ -1327,18 +1526,15 @@
 
       if (result) vectors.set(ID, result);
     }
-
     v3_Normalize({ ID }) {
       const v = vectors.get(ID);
       if (v) vectors.set(ID, m4.v3_normalize(v));
     }
-
     v3_ApplyMatrix({ ID, M }, util) {
       const v = vectors.get(ID);
       const mat = _parseInput(M, util) || m4.identity();
       if (v) vectors.set(ID, m4.v3_transform(v, mat));
     }
-
     v3_Get({ ID, COMP }) {
       const v = vectors.get(ID);
       if (!v) return 0;
@@ -1350,7 +1546,7 @@
   const vapor3DInstance = new Vapor3D();
 
   runtime.on('PROJECT_STOP_ALL', () => {
-    console.log("Vapor3D: Project stopped, clearing resources...: Project stopped.");
+    console.log("Vapor3D: Project stopped, clearing resources...");
     isTakenOver = false;
     if (canvas3d) canvas3d.style.display = 'none';
     vapor3DInstance.gl_ResetResources();

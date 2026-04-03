@@ -3,7 +3,7 @@
 // Description: Better GLB loader
 // By: Joy_Ful <https://github.com/JoyFul721>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.5.0 - Tailored
+// Version: 1.6.0 - URL & window.Vapor3D_Registry
 
 (function (Scratch) {
     'use strict';
@@ -120,13 +120,48 @@
         }
     };
 
+    const fetchBinaryData = async (url) => {
+        if (!url || typeof url !== 'string') throw new Error('Invalid URL');
+
+        // DataURL
+        if (url.startsWith('data:')) {
+            const parts = url.split(',');
+            const b64 = parts.pop();
+            const binStr = atob(b64);
+            const bytes = new Uint8Array(binStr.length);
+            for (let i = 0; i < binStr.length; i++) {
+                bytes[i] = binStr.charCodeAt(i);
+            }
+            return bytes;
+        }
+
+        //  HTTP(S) 或 Blob URL
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+            const buffer = await response.arrayBuffer();
+            return new Uint8Array(buffer);
+        } catch (e) {
+            console.error('Binary fetch error:', e);
+            throw e;
+        }
+    };
+
     let models = {};
     let modelOrder = [];
+
+    const registry = window.Vapor3D_Registry || (window.Vapor3D_Registry = new Map());
+    
 
     class OmniGLB {
 
         constructor() {
             this._boundGetAllLists = this._getAllLists.bind(this);
+            if (runtime) {
+                runtime.on('PROJECT_STOP_ALL', () => {
+                    this.clearAll();
+                });
+            }
         }
 
         _lp(v) {
@@ -162,43 +197,72 @@
                 return result;
             }
         }
-        _resolveMaterial(json, matIdx) {
+        _resolveMaterial(json, matIdx, imageIDMap = {}) {
             const defaultMat = {
-                name: "None", albedo: [1, 1, 1, 1], albedoTex: "None",
-                metallic: 1, roughness: 1, pbrTex: "None", normalTex: "None",
-                emissive: [0, 0, 0], emissiveTex: "None"
+                name: "None",
+                albedo: [1, 1, 1, 1], albedoTex: "None", albedoTexID: "",
+                metallic: 1, roughness: 1,
+                pbrTex: "None", pbrTexID: "",
+                normalTex: "None", normalTexID: "",
+                emissive: [0, 0, 0], emissiveTex: "None", emissiveTexID: ""
             };
 
             if (matIdx === undefined || !json.materials || !json.materials[matIdx]) return defaultMat;
             const matDef = json.materials[matIdx];
             const res = { ...defaultMat, name: matDef.name || `Mat_${matIdx}` };
 
-            // 辅助：从索引获取贴图名称
-            const getTexName = (texIndex) => {
-                if (texIndex === undefined || !json.textures || !json.textures[texIndex]) return "None";
-                const tex = json.textures[texIndex];
-                const sourceIdx = tex.source; // GLTF 纹理指向 Image
-                if (sourceIdx === undefined || !json.images || !json.images[sourceIdx]) return `Tex_${texIndex}`;
+            // 获取名字 和 共享池 ID
+            const getTexInfo = (texIndex) => {
+                if (texIndex === undefined || !json.textures || !json.textures[texIndex]) return { name: "None", id: "" };
+
+                const texture = json.textures[texIndex];
+
+                // 优先从 WebP 扩展获取
+                let sourceIdx = texture.source;
+                if (texture.extensions && texture.extensions.EXT_texture_webp) {
+                    sourceIdx = texture.extensions.EXT_texture_webp.source;
+                }
+
+                if (sourceIdx === undefined || !json.images || !json.images[sourceIdx]) return { name: `Tex_${texIndex}`, id: "" };
+
                 const img = json.images[sourceIdx];
-                // 优先取名字，没有名字取 uri，再没有取序号
-                return img.name || (img.uri ? img.uri.split('/').pop() : `Image_${sourceIdx}`);
+                let name = img.name || (img.uri && !img.uri.startsWith('data:') ? img.uri.split('/').pop() : `Image_${sourceIdx}`);
+
+                // 从映射表中获取 ID
+                let id = imageIDMap[sourceIdx] || "";
+
+                return { name, id };
             };
 
-            // PBR 属性
             if (matDef.pbrMetallicRoughness) {
                 const pbr = matDef.pbrMetallicRoughness;
                 if (pbr.baseColorFactor) res.albedo = pbr.baseColorFactor;
-                if (pbr.baseColorTexture) res.albedoTex = getTexName(pbr.baseColorTexture.index);
+                if (pbr.baseColorTexture) {
+                    const info = getTexInfo(pbr.baseColorTexture.index);
+                    res.albedoTex = info.name;
+                    res.albedoTexID = info.id; // 存入 ID
+                }
 
                 if (pbr.metallicFactor !== undefined) res.metallic = pbr.metallicFactor;
                 if (pbr.roughnessFactor !== undefined) res.roughness = pbr.roughnessFactor;
-                if (pbr.metallicRoughnessTexture) res.pbrTex = getTexName(pbr.metallicRoughnessTexture.index);
+                if (pbr.metallicRoughnessTexture) {
+                    const info = getTexInfo(pbr.metallicRoughnessTexture.index);
+                    res.pbrTex = info.name;
+                    res.pbrTexID = info.id; // 存入 ID
+                }
             }
 
-            // 其它纹理
-            if (matDef.normalTexture) res.normalTex = getTexName(matDef.normalTexture.index);
+            if (matDef.normalTexture) {
+                const info = getTexInfo(matDef.normalTexture.index);
+                res.normalTex = info.name;
+                res.normalTexID = info.id;
+            }
             if (matDef.emissiveFactor) res.emissive = matDef.emissiveFactor;
-            if (matDef.emissiveTexture) res.emissiveTex = getTexName(matDef.emissiveTexture.index);
+            if (matDef.emissiveTexture) {
+                const info = getTexInfo(matDef.emissiveTexture.index);
+                res.emissiveTex = info.name;
+                res.emissiveTexID = info.id;
+            }
 
             return res;
         }
@@ -252,8 +316,8 @@
         getInfo() {
             return {
                 id: 'omniGLB',
-                docsURI: 'https://github.com/JoyFul114514/Conf-Engine',
-                name: 'Vapor 3D - OmniGLB',
+                docsURI: 'https://github.com/JoyFul721/Conf-Engine',
+                name: 'Vapor3D - OmniGLB',
                 color1: '#7db4b2',
                 blocks: [
                     { blockType: Scratch.BlockType.LABEL, text: "场景&内存" },
@@ -286,7 +350,8 @@
                     { blockType: Scratch.BlockType.LABEL, text: "网格数据" },
                     { opcode: 'getMeshCount', blockType: Scratch.BlockType.REPORTER, text: '模型 [MI] 的网格数量', arguments: { MI: { type: 'number', defaultValue: 0 } } },
                     { opcode: 'getMeshInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格[MSI] 的 [INFO]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' } } },
-                    {opcode: 'getMaterialInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 材质 [PROP]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, PROP: { type: 'string', menu: 'matPropMenu' } } },
+                    { opcode: 'getMaterialInfo', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 材质名 [PROP]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, PROP: { type: 'string', menu: 'matPropMenu' } } },
+                    { opcode: 'getMaterialTextureID', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 材质 ID [PROP]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, PROP: { type: 'string', menu: 'matPropMenu' } } },
                     { opcode: 'getMeshInfoToList', blockType: Scratch.BlockType.COMMAND, text: '获取模型 [MI] 网格 [MSI] 的 [INFO] 存入列表 [LIST]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, INFO: { type: 'string', menu: 'meshMenu' }, LIST: { type: 'string', menu: 'listMenu' } } },
                     { opcode: 'getSkinningMatrices', blockType: Scratch.BlockType.REPORTER, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' } } },
                     { opcode: 'getSkinningMatricesToList', blockType: Scratch.BlockType.COMMAND, text: '获取模型 [MI] 网格 [MSI] 的 [TYPE] 绑定矩阵存入列表 [LIST]', arguments: { MI: { type: 'number', defaultValue: 0 }, MSI: { type: 'number', defaultValue: 0 }, TYPE: { type: 'string', menu: 'poseMenu', defaultValue: 'current' }, LIST: { type: 'string', menu: 'listMenu' } } },
@@ -312,13 +377,12 @@
                     matPropMenu: { items: [{ text: 'albedo', value: 'albedo' }, { text: 'metallic', value: 'metallic' }, { text: 'roughness', value: 'roughness' }, { text: 'pbrTex', value: 'pbrTex' },{ text: 'normal', value: 'normal' },{ text: 'emissive', value: 'emissive' } ] } }
             };
         }
-        parseScene(args) {
+        async parseScene(args) {
             try {
                 const mid = String(args.MID);
-                const b64 = args.STR.split(',').pop();
-                const binStr = atob(b64);
-                const bytes = new Uint8Array(binStr.length);
-                for (let i = 0; i < binStr.length; i++) bytes[i] = binStr.charCodeAt(i);
+                
+                const bytes = await fetchBinaryData(args.STR);
+
                 const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
                 if (dv.getUint32(0, true) !== 0x46546C67) return;
 
@@ -379,6 +443,27 @@
                     if (inv) n.invBindWorld.set(inv);
                 });
 
+                // 分离内嵌贴图
+                const imageIDMap = {};
+                const textureIDs = [];
+                const registry = window.Vapor3D_Registry;
+
+                if (json.images) {
+                    json.images.forEach((img, idx) => {
+                        const texID = `${mid}_img_${idx}`;
+                        textureIDs.push(texID); // 记录下来，方便以后清理
+
+                        if (img.bufferView !== undefined && bin) {
+                            const bv = json.bufferViews[img.bufferView];
+                            const imageBytes = new Uint8Array(bin, bv.byteOffset || 0, bv.byteLength);
+                            registry.set(texID, imageBytes);
+                        } else if (img.uri) {
+                            registry.set(texID, img.uri);
+                        }
+                        imageIDMap[idx] = texID;
+                    });
+                }
+
                 const geoLib = [];
                 (json.meshes || []).forEach((m, mIdx) => {
                     const primitives = [];
@@ -389,17 +474,17 @@
                         const rU = this._getBuf(json, bin, prim.attributes.TEXCOORD_0);
                         const rI = this._getBuf(json, bin, prim.attributes.JOINTS_0);
                         const rW = this._getBuf(json, bin, prim.attributes.WEIGHTS_0);
-                        const matData = this._resolveMaterial(json, prim.material);
+                        const matData = this._resolveMaterial(json, prim.material, imageIDMap);
 
                         let p = [], n = [], u = [], rawIndices = [], rawWeights = [];
 
-                        // 非常好优化：记录当前网格真正用到的骨骼索引，不然每个网格都上传完整的矩阵给你uniform炸开
+                        // 记录当前网格真正用到的骨骼索引并创建独立 handles
                         let usedJointIndices = [];
                         let jointMap = new Map();
 
                         const processVertex = (idx) => {
                             if (rP) p.push(rP[idx * 3], rP[idx * 3 + 1], rP[idx * 3 + 2]);
-                            if (rN) n.push(rN[idx * 3], rN[idx * 3 + 1], rN[idx * 3 + 2]); // <--- 新增法线数据压入
+                            if (rN) n.push(rN[idx * 3], rN[idx * 3 + 1], rN[idx * 3 + 2]);
                             if (rU) u.push(rU[idx * 2], rU[idx * 2 + 1]);
                             if (rI && rW) {
                                 // 提取该顶点的 4 根骨骼及权重
@@ -465,7 +550,7 @@
                             let handles = [], finalIndices = [];
                             if (node.skinIdx !== undefined && json.skins && json.skins[node.skinIdx]) {
                                 const skinJoints = json.skins[node.skinIdx].joints;
-                                // 非常好优化：将网格局部收集到的索引，还原映射到全局 skin 骨骼
+                                // 将网格局部收集到的索引，还原映射到全局 skin 骨骼
                                 handles = geo.usedJointIndices.map(jIdx => skinJoints[jIdx]);
                                 finalIndices = geo.rawIndices; // 此时已经是映射完毕的局部索引用以匹配 handles
                             } else {
@@ -524,7 +609,7 @@
                         animations[anim.name || `Anim_${aIdx}`] = { bakedTracks, duration };
                     });
                 }
-                models[mid] = { renderables, nodes, calcOrder, animations, activeAnim: "", activeTime: 0 };
+                models[mid] = { renderables, nodes, calcOrder, animations, activeAnim: "", activeTime: 0, textureIDs };
                 if (!modelOrder.includes(mid)) modelOrder.push(mid);
             } catch (e) { console.error("GLB 加载失败:", e); }
         }
@@ -646,8 +731,29 @@
         // ---------------------------------Model--------------------------------
 
         getModelCount() { return modelOrder.length; }
-        flushModel(args) { const m = models[modelOrder[Math.floor(args.MI)]]; if (m) m.renderables.forEach(r => { r.geo = null; }); }
-        clearAll() { models = {}; modelOrder = []; }
+        flushModel(args) {
+            const mid = modelOrder[Math.floor(args.MI)];
+            const m = models[mid];
+            if (m) {
+                // 清空全局池
+                if (m.textureIDs && window.Vapor3D_Registry) {
+                    m.textureIDs.forEach(id => window.Vapor3D_Registry.delete(id));
+                }
+                // 清理顶点
+                m.renderables.forEach(r => { r.geo = null; });
+            }
+        }
+        clearAll() {
+            if (window.Vapor3D_Registry) {
+                for (let mid in models) {
+                    if (models[mid].textureIDs) {
+                        models[mid].textureIDs.forEach(id => window.Vapor3D_Registry.delete(id));
+                    }
+                }
+            }
+            models = {};
+            modelOrder = [];
+        }
 
         // ---------------------------------Mesh---------------------------------
 
@@ -674,6 +780,20 @@
                 case 'pbrTex': return mat.pbrTex;
                 case 'normal': return mat.normalTex;
                 case 'emissive': return mat.emissiveTex !== "None" ? mat.emissiveTex : JSON.stringify(this._lp(mat.emissive));
+                default: return "";
+            }
+        }
+        getMaterialTextureID(args) {
+            const mid = modelOrder[Math.floor(args.MI)];
+            const m = models[mid];
+            if (!m || !m.renderables[args.MSI]) return "";
+            const mat = m.renderables[args.MSI].mat;
+
+            switch (args.PROP) {
+                case 'albedo': return mat.albedoTexID || "";
+                case 'pbrTex': return mat.pbrTexID || "";
+                case 'normal': return mat.normalTexID || "";
+                case 'emissive': return mat.emissiveTexID || "";
                 default: return "";
             }
         }
