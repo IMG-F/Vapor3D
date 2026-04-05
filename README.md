@@ -4,7 +4,12 @@
 
 ---
 
-> **TODO**: 扩展处于测试阶段，可能会有各种问题。文档目前仅为大纲，我有时间再来写详细使用方法。
+> **TODO**: 扩展处于测试阶段，遇到问题欢迎向我反馈。文档目前仅为大纲，将来有时间会来完善。
+
+---
+
+> **Version 1.3.0** • *April 4, 2026*
+> **Update**: Light volume culling; Fetching & unpacking external .glb textures into global cache.
 
 ---
 
@@ -15,16 +20,15 @@
 
 ## 渲染效果
 
-![rain](screenshots/4f608e9e7445583d0d3df88c7549e611.png)
+![ExtLoad_Stencil](screenshots/ExtLoad_Stencil.png)
 ![IBL1](screenshots/IBL2.png)
 ![IBL1](screenshots/IBL1.png)
+![rain](screenshots/4f608e9e7445583d0d3df88c7549e611.png)
 
 * 可前往 example/ 查看我最近在写的一些二次开发作品，均采用MIT开源
 
-## 提示
-
-> `example/pbr.sb3` 示例中使用的 PBR 贴图来源于 FreePBR.com。该资源遵循其官方授权协议，仅供学习与非商业演示使用。
-> `example/pbr.sb3` 示例中使用的 IBL 预卷积贴图来源于 cmftStudio 官方示例资源。该资源版权归原作者所有，仅供学习与非商业演示使用。
+---
+> <small>本文档及 `example/pbr.sb3` 中使用的资源致谢：PBR 贴图 (FreePBR.com)、IBL 预卷积贴图 (cmftStudio)、Water Bottle 模型 (Khronos Group, CC-BY 4.0)、UV Grid 贴图 (Three.js, MIT) 及 BRDF 查找表 (LearnOpenGL, CC BY-NC 4.0)。所有资源仅供学习与非商业演示使用，版权归原作者所有。</small>
 
 
 **By: Joy_Ful** | License: MPL-2.0
