@@ -3,47 +3,14 @@
 // Description: 3D Engine for Turbowarp
 // By: Joy_Ful <https://github.com/JoyFul721>
 // License: MPL-2.0 AND BSD-3-Clause
-// Version: 1.4.0
+// Version: 1.3.0 - Stencil Logic & Remote Asset Unpacking
 
 var gl3d = null;
-
-var V3D_Exchange = V3D_Exchange || {
-  models: {},
-  textures: [],
-  materials: [],
-  status: "idle",
-  lastError: ""
-};
-
-var V3D_TexturePool = {
-  cache: new Map(),
-
-  has(name) { return this.cache.has(name); },
-  get(name) { return this.cache.get(name); },
-  set(name, texture) {
-    this.cache.set(name, texture);
-  },
-  destroy(name) {
-    const tex = this.cache.get(name);
-    if (gl3d && tex instanceof WebGLTexture) {
-      gl3d.deleteTexture(tex);
-    }
-    this.cache.delete(name);
-  },
-  clearAll() {
-    this.cache.forEach((tex) => {
-      if (gl3d && tex instanceof WebGLTexture) {
-        gl3d.deleteTexture(tex);
-      }
-    });
-    this.cache.clear();
-  }
-};
 
 (function (Scratch) {
   "use strict";
 
-  if (!Scratch.extensions.unsandboxed) throw new Error("Vapor3D must run unsandboxed");
+  if (!Scratch.extensions.unsandboxed) throw new Error("Vapor 3D must run unsandboxed");
 
   const vm = Scratch.vm;
   const renderer = vm.renderer;
@@ -79,6 +46,7 @@ var V3D_TexturePool = {
   const shaders = new Map();
   const vaos = new Map();
   const fbos = new Map();
+  const textures = new Map();
   const vbos = [];
   const rbos = [];
 
@@ -257,17 +225,25 @@ var V3D_TexturePool = {
     return list ? list.value.map(Number) : null;
   };
 
+  const _getList = (name, util) => {
+    if (!name) return null;
+    const list = util.target.lookupVariableByNameAndType(name, "list");
+    if (!list) return null;
+    return list.value.map(Number); // 转换为 TypedArray 之前必须是 Number
+  };
   const _getAllLists = () => {
     const stage = vm.runtime.getTargetForStage();
     const editingTarget = vm.editingTarget || stage;
     const lists = ["NONE"];
-    // find in Sprite
+
+    // 获取当前选中的角色（Sprite）的私有列表
     if (editingTarget && editingTarget.variables) {
       Object.values(editingTarget.variables)
         .filter(v => v.type === 'list')
         .forEach(v => lists.push(v.name));
     }
-    // find in stage
+
+    // 获取舞台（Stage）的全局列表
     if (stage && stage !== editingTarget && stage.variables) {
       Object.values(stage.variables)
         .filter(v => v.type === 'list')
@@ -460,6 +436,39 @@ var V3D_TexturePool = {
 
     return { glInternalFormat, glFormat, glType, numberOfMipmapLevels, mipmaps };
   };
+  // ==========================================
+  // 纹理池
+  // ==========================================
+  const texturePool = {
+    cache: new Map(),
+
+    // 检查是否存在
+    has(name) { return this.cache.has(name); },
+
+    // 渲染循环中获取 ID
+    getId(name) { return this.cache.get(name)?.id; },
+
+    // 渲染循环中获取 WebGL 对象
+    get(name) { return this.cache.get(name)?.texture; },
+
+    // 添加纹理
+    set(name, id, texture) { this.cache.set(name, { id, texture }); },
+
+    destroy(name) {
+      const item = this.cache.get(name);
+      if (item) {
+        gl3d.deleteTexture(item.texture);
+        this.cache.delete(name);
+      }
+    },
+
+    clearAll() {
+      this.cache.forEach((item) => {
+        gl3d.deleteTexture(item.texture);
+      });
+      this.cache.clear();
+    }
+  };
 
   // ==========================================
   // Vapor3D
@@ -518,7 +527,7 @@ var V3D_TexturePool = {
               SLOT: { type: "string", menu: "fboSlotMenu", defaultValue: "COLOR_ATTACHMENT0" }
             }
           },
-          { opcode: "fbo_Bind", blockType: "command", text: "glBindFramebuffer [ID]", arguments: { ID: { type: "string", defaultValue: "null" } } },
+          { opcode: "fbo_Bind", blockType: "command", text: "glBindFramebuffer [ID]", arguments: { ID: { type: "string" } } },
 
           "---",
           { blockType: "label", text: "Vertex Array Object" },
@@ -526,52 +535,22 @@ var V3D_TexturePool = {
           { opcode: "vao_CreateScreenQuad", blockType: "command", text: "create Quad [ID]", arguments: { ID: { type: "string", defaultValue: "screenQuad" } } },
           { opcode: "vao_CreateCube", blockType: "command", text: "create Cube [ID]", arguments: { ID: { type: "string", defaultValue: "cube" } } },
           { opcode: "vao_CreateSphere", blockType: "command", text: "create Sphere [ID] Lat [LAT] Lon [LON]", arguments: {ID: { type: "string", defaultValue: "lightSphere" },LAT: { type: "number", defaultValue: 16 },LON: { type: "number", defaultValue: 16 }}},
-
-
-
-
-
           {
-            opcode: 'vao_CreateEmpty',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'create VAO [ID]',
+            opcode: "vao_CreateCustom",
+            blockType: "command",
+            text: "create VAO [ID] #0 [L0] size [S0] #1 [L1] size [S1] #2 [L2] size [S2] #3 [L3] size [S3] #4 [L4] size [S4] #5 [L5] size [S5] #6 [L6] size [S6] Indices [I]",
             arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'sample' }
+              ID: { type: "string", defaultValue: "sample" },
+              L0: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S0: { type: "string", defaultValue: "3" },
+              L1: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S1: { type: "string", defaultValue: "3" },
+              L2: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S2: { type: "string", defaultValue: "2" },
+              L3: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S3: { type: "string", defaultValue: "2" },
+              L4: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S4: { type: "string", defaultValue: "3" },
+              L5: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S5: { type: "string", defaultValue: "4" },
+              L6: { type: "string", menu: "listMenu", defaultValue: "NONE" }, S6: { type: "string", defaultValue: "4" },
+              I: { type: "string", menu: "listMenu", defaultValue: "NONE" }
             }
           },
-          {
-            opcode: 'vao_SetAttrFromExchange',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'VAO [ID] bind attribute [LOC] size [SIZE] from model [NAME] mesh [IDX] [ATTR]',
-            arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'vao1' },
-              LOC: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-              SIZE: { type: Scratch.ArgumentType.NUMBER, defaultValue: 3 },
-              NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'sample' },
-              IDX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
-              ATTR: { type: Scratch.ArgumentType.STRING, menu: 'attrMenu', defaultValue: 'position' }
-            }
-          },
-          {
-            opcode: 'vao_SetIndicesFromExchange',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'VAO [ID] bind index from [NAME] mesh [IDX]',
-            arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'vao1' },
-              NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'sample' },
-              IDX: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }
-            }
-          },
-          {
-            opcode: 'vao_Destroy',
-            blockType: Scratch.BlockType.COMMAND,
-            text: 'destroy VAO [ID] ',
-            arguments: {
-              ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'sample' }
-            }
-          },
-
-
 
           "---",
           { blockType: "label", text: "Texture" },
@@ -807,13 +786,6 @@ var V3D_TexturePool = {
           opMenu: { acceptReporters: true, items: [ { text: "KEEP", value: "KEEP" }, { text: "ZERO", value: "ZERO" }, { text: "REPLACE", value: "REPLACE" }, { text: "INCR", value: "INCR" }, { text: "DECR", value: "DECR" }, { text: "INVERT", value: "INVERT" }, { text: "INCR_WRAP", value: "INCR_WRAP" }, { text: "DECR_WRAP", value: "DECR_WRAP" } ] },
           faceMenu: { acceptReporters: true, items: [ { text: "FRONT", value: "FRONT" }, { text: "BACK", value: "BACK" }, { text: "FRONT_AND_BACK", value: "FRONT_AND_BACK" } ] },
           blendMenu: [ "ZERO", "ONE", "SRC_COLOR", "ONE_MINUS_SRC_COLOR", "DST_COLOR", "ONE_MINUS_DST_COLOR", "SRC_ALPHA", "ONE_MINUS_SRC_ALPHA", "DST_ALPHA", "ONE_MINUS_DST_ALPHA", "CONSTANT_COLOR", "ONE_MINUS_CONSTANT_COLOR"],
-          attrMenu: [
-            { text: '顶点坐标 (position)', value: 'position' },
-            { text: '法线 (normal)', value: 'normal' },
-            { text: '纹理坐标 (uv)', value: 'uv' },
-            { text: '切线 (tangent)', value: 'tangent' },
-            { text: '顶点颜色 (color)', value: 'color' }
-          ]
         }
       };
     }
@@ -860,19 +832,26 @@ var V3D_TexturePool = {
       shaders.forEach(p => gl3d.deleteProgram(p));
       shaders.clear();
 
-      fbos.forEach(entry => gl3d.deleteFramebuffer(entry.fbo));
+      fbos.forEach(entry => {
+        if (entry && entry.fbo) gl3d.deleteFramebuffer(entry.fbo);
+      });
       fbos.clear();
 
-      vaos.forEach(entry => {
-        if (entry.vbos) entry.vbos.forEach(b => gl3d.deleteBuffer(b));
-        gl3d.deleteVertexArray(entry.vao);
-      });
+      vaos.forEach(v => gl3d.deleteVertexArray(v.vao));
       vaos.clear();
 
-      V3D_TexturePool.clearAll();
+      vbos.forEach(b => gl3d.deleteBuffer(b));
+      vbos.length = 0;
+      rbos.forEach(r => gl3d.deleteRenderbuffer(r));
+      rbos.length = 0;
 
-      V3D_Exchange.models = {};
-      V3D_Exchange.status = "idle";
+      texturePool.clearAll();
+      textures.forEach(t => {
+        if (t instanceof WebGLTexture) gl3d.deleteTexture(t);
+      });
+      textures.clear();
+
+      vectors.clear();
 
       console.log("Vapor3D: All resources have been released");
     }
@@ -982,8 +961,8 @@ var V3D_TexturePool = {
     }
     fbo_AttachTexture({ ID, TEX, SLOT }) {
       const fboEntry = fbos.get(ID);
-      const tex = V3D_TexturePool.get(TEX);
-      const texInfo = V3D_TexturePool.get(TEX + "_info");
+      const tex = textures.get(TEX);
+      const texInfo = textures.get(TEX + "_info");
 
       if (!fboEntry || !tex) return;
 
@@ -1023,59 +1002,49 @@ var V3D_TexturePool = {
     }
 
     vao_CreateScreenQuad({ ID }) {
-      if (!gl3d) return;
-      this.vao_Destroy({ ID });
+      if (vaos.has(ID)) return;
       const pos = [-1, 1, 0, -1, -1, 0, 1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0];
       const uv = [0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0];
-      const vao = gl3d.createVertexArray();
-      gl3d.bindVertexArray(vao);
-      const localVbos = [];
+      const vao = gl3d.createVertexArray(); gl3d.bindVertexArray(vao);
       const b = (d, l, s) => {
-        const buf = gl3d.createBuffer();
-        gl3d.bindBuffer(gl3d.ARRAY_BUFFER, buf);
+        const buf = gl3d.createBuffer(); gl3d.bindBuffer(gl3d.ARRAY_BUFFER, buf);
         gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(d), gl3d.STATIC_DRAW);
-        gl3d.enableVertexAttribArray(l);
-        gl3d.vertexAttribPointer(l, s, gl3d.FLOAT, false, 0, 0);
-        localVbos.push(buf);
+        gl3d.enableVertexAttribArray(l); gl3d.vertexAttribPointer(l, s, gl3d.FLOAT, false, 0, 0);
+        vbos.push(buf);
       };
-      b(pos, 0, 3);
-      b(uv, 1, 2); 
-      gl3d.bindVertexArray(null);
-      vaos.set(ID, {
-        vao,
-        vbos: localVbos,
-        hasElements: false,
-        defaultCount: 6
-      });
+      b(pos, 0, 3); b(uv, 1, 2);
+      vaos.set(ID, { vao, hasElements: false }); gl3d.bindVertexArray(null);
+      vaos.set(ID, { vao, hasElements: false, defaultCount: 6 });
     }
     vao_CreateCube({ ID }) {
-      if (!gl3d) return;
-      this.vao_Destroy({ ID });
+      if (vaos.has(ID)) return;
       const v = [
         -1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1,
         -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1
       ];
       const indices = [
-        0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5,
-        4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4
+        0, 1, 2, 2, 3, 0, // 前
+        1, 5, 6, 6, 2, 1, // 右
+        5, 4, 7, 7, 6, 5, // 后
+        4, 0, 3, 3, 7, 4, // 左
+        3, 2, 6, 6, 7, 3, // 上
+        4, 5, 1, 1, 0, 4  // 下
       ];
       const vao = gl3d.createVertexArray();
       gl3d.bindVertexArray(vao);
-      const localVbos = [];
       const vbo = gl3d.createBuffer();
       gl3d.bindBuffer(gl3d.ARRAY_BUFFER, vbo);
       gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(v), gl3d.STATIC_DRAW);
       gl3d.enableVertexAttribArray(0);
       gl3d.vertexAttribPointer(0, 3, gl3d.FLOAT, false, 0, 0);
-      localVbos.push(vbo);
+      vbos.push(vbo);
       const ebo = gl3d.createBuffer();
       gl3d.bindBuffer(gl3d.ELEMENT_ARRAY_BUFFER, ebo);
       gl3d.bufferData(gl3d.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl3d.STATIC_DRAW);
-      localVbos.push(ebo);
+      vbos.push(ebo);
       gl3d.bindVertexArray(null);
       vaos.set(ID, {
         vao,
-        vbos: localVbos,
         hasElements: true,
         defaultCount: 36,
         elementType: gl3d.UNSIGNED_SHORT
@@ -1083,8 +1052,7 @@ var V3D_TexturePool = {
     }
     vao_CreateSphere(args) {
       const ID = String(args.ID);
-      if (!gl3d) return;
-      this.vao_Destroy({ ID });
+      if (vaos.has(ID)) return;
       const latBands = Math.max(3, parseInt(args.LAT) || 16);
       const lonBands = Math.max(3, parseInt(args.LON) || 16);
       const pos = [];
@@ -1093,131 +1061,114 @@ var V3D_TexturePool = {
         const theta = (i * Math.PI) / latBands;
         const sinTheta = Math.sin(theta);
         const cosTheta = Math.cos(theta);
+
         for (let j = 0; j <= lonBands; j++) {
           const phi = (j * 2 * Math.PI) / lonBands;
-          pos.push(Math.cos(phi) * sinTheta, cosTheta, Math.sin(phi) * sinTheta);
+          const x = Math.cos(phi) * sinTheta;
+          const y = cosTheta;
+          const z = Math.sin(phi) * sinTheta;
+          pos.push(x, y, z);
         }
       }
       for (let i = 0; i < latBands; i++) {
         for (let j = 0; j < lonBands; j++) {
           const first = i * (lonBands + 1) + j;
           const second = first + lonBands + 1;
-          indices.push(first, first + 1, second, second, first + 1, second + 1);
+
+          // 左上 -> 右上 -> 左下
+          indices.push(first, first + 1, second);
+          // 左下 -> 右上 -> 右下
+          indices.push(second, first + 1, second + 1);
         }
       }
       const vao = gl3d.createVertexArray();
       gl3d.bindVertexArray(vao);
-      const localVbos = [];
-      const vbo = gl3d.createBuffer();
-      gl3d.bindBuffer(gl3d.ARRAY_BUFFER, vbo);
-      gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(pos), gl3d.STATIC_DRAW);
-      gl3d.enableVertexAttribArray(0);
-      gl3d.vertexAttribPointer(0, 3, gl3d.FLOAT, false, 0, 0);
-      localVbos.push(vbo);
+      const b = (d, l, s) => {
+        const buf = gl3d.createBuffer();
+        gl3d.bindBuffer(gl3d.ARRAY_BUFFER, buf);
+        gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(d), gl3d.STATIC_DRAW);
+        gl3d.enableVertexAttribArray(l);
+        gl3d.vertexAttribPointer(l, s, gl3d.FLOAT, false, 0, 0);
+        vbos.push(buf);
+      };
+      b(pos, 0, 3);
       const ebo = gl3d.createBuffer();
       gl3d.bindBuffer(gl3d.ELEMENT_ARRAY_BUFFER, ebo);
       gl3d.bufferData(gl3d.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl3d.STATIC_DRAW);
-      localVbos.push(ebo);
+      vbos.push(ebo);
       gl3d.bindVertexArray(null);
       vaos.set(ID, {
         vao,
-        vbos: localVbos,
         hasElements: true,
         defaultCount: indices.length,
         elementType: gl3d.UNSIGNED_SHORT
       });
     }
-
-
-
-    vao_CreateEmpty({ ID }) {
-      if (!gl3d) return;
-      this.vao_Destroy({ ID });
+    vao_CreateCustom({ ID, L0, S0, L1, S1, L2, S2, L3, S3, L4, S4, L5, S5, L6, S6, I }, util) {
+      if (vaos.has(ID)) return;
       const vao = gl3d.createVertexArray();
-      vaos.set(ID, { vao, hasElements: false, defaultCount: 0, vbos: [] });
-      // console.log("Vapor3D: create empty VAO");
-
-    }
-    vao_SetAttrFromExchange({ ID, ATTR, MODEL_NAME, IDX, LOC }) {
-      const entry = vaos.get(ID);
-      const model = V3D_Exchange.models[MODEL_NAME];
-      if (!entry || !model || !model.meshes[IDX]) return;
-
-      const mesh = model.meshes[IDX];
-      const data = mesh.attributes[ATTR];
-      if (!data) return;
-
-      const size = (ATTR === "uv") ? 2 : (ATTR === "tangent" ? 4 : 3);
-
-      gl3d.bindVertexArray(entry.vao);
-      const vbo = gl3d.createBuffer();
-      gl3d.bindBuffer(gl3d.ARRAY_BUFFER, vbo);
-      gl3d.bufferData(gl3d.ARRAY_BUFFER, data, gl3d.STATIC_DRAW);
-      gl3d.enableVertexAttribArray(LOC);
-      gl3d.vertexAttribPointer(LOC, size, gl3d.FLOAT, false, 0, 0);
-      entry.vbos.push(vbo);
-
-      if (ATTR === 'position' && !entry.hasElements) {
-        entry.defaultCount = mesh.count;
-      }
-
-      gl3d.bindVertexArray(null);
-    }
-
-    vao_SetIndicesFromExchange({ ID, MODEL_NAME, IDX }) {
-      const entry = vaos.get(ID);
-      const model = V3D_Exchange.models[MODEL_NAME];
-      if (!entry || !model || !model.meshes[IDX]) return;
-
-      const mesh = model.meshes[IDX];
-      if (!mesh.indices) return;
-
-      gl3d.bindVertexArray(entry.vao);
-      const ebo = gl3d.createBuffer();
-      gl3d.bindBuffer(gl3d.ELEMENT_ARRAY_BUFFER, ebo);
-      gl3d.bufferData(gl3d.ELEMENT_ARRAY_BUFFER, mesh.indices, gl3d.STATIC_DRAW);
-
-      entry.vbos.push(ebo);
-      entry.hasElements = true;
-      entry.defaultCount = mesh.indices.length;
-
-      if (mesh.indices instanceof Uint32Array) {
-        entry.elementType = gl3d.UNSIGNED_INT;
-      } else {
-        entry.elementType = gl3d.UNSIGNED_SHORT;
-      }
-
-      gl3d.bindVertexArray(null);
-      // console.log(`%c[Index] VAO:${ID} 设置索引成功，数量:${entry.defaultCount}`, "color: #00ffff;");
-    }
-
-    vao_Destroy({ ID }) {
-      const entry = vaos.get(ID);
-      if (entry && gl3d) {
-        if (entry.vbos) {
-          entry.vbos.forEach(b => gl3d.deleteBuffer(b));
+      gl3d.bindVertexArray(vao);
+      const slots = [
+        { list: L0, size: parseInt(S0), loc: 0 },
+        { list: L1, size: parseInt(S1), loc: 1 },
+        { list: L2, size: parseInt(S2), loc: 2 },
+        { list: L3, size: parseInt(S3), loc: 3 },
+        { list: L4, size: parseInt(S4), loc: 4 },
+        { list: L5, size: parseInt(S5), loc: 5 },
+        { list: L6, size: parseInt(S6), loc: 6 } 
+      ];
+      let drawCount = 0;
+      slots.forEach(slot => {
+        if (slot.list === "NONE") return;
+        const data = _getList(slot.list, util);
+        if (!data || data.length === 0) return;
+        if (drawCount === 0) {
+          drawCount = Math.floor(data.length / slot.size);
         }
-        gl3d.deleteVertexArray(entry.vao);
-        vaos.delete(ID);
+        const buf = gl3d.createBuffer();
+        gl3d.bindBuffer(gl3d.ARRAY_BUFFER, buf);
+        gl3d.bufferData(gl3d.ARRAY_BUFFER, new Float32Array(data), gl3d.STATIC_DRAW);
+        gl3d.enableVertexAttribArray(slot.loc);
+        gl3d.vertexAttribPointer(slot.loc, slot.size, gl3d.FLOAT, false, 0, 0);
+        vbos.push(buf);
+      });
+      let hasElements = false;
+      if (I !== "NONE") {
+        const idxData = _getList(I, util);
+        if (idxData && idxData.length > 0) {
+          const eb = gl3d.createBuffer();
+          gl3d.bindBuffer(gl3d.ELEMENT_ARRAY_BUFFER, eb);
+          gl3d.bufferData(gl3d.ELEMENT_ARRAY_BUFFER, new Uint32Array(idxData), gl3d.STATIC_DRAW);
+          vbos.push(eb);
+          hasElements = true;
+          drawCount = idxData.length;
+        }
       }
+      vaos.set(ID, {
+        vao,
+        hasElements,
+        defaultCount: drawCount
+      });
+      gl3d.bindVertexArray(null);
     }
-
-
 
     gl_Draw({ ID, COUNT, MODE }) {
       const entry = vaos.get(ID);
       if (!entry) return;
-
       gl3d.bindVertexArray(entry.vao);
-      let drawCount = (COUNT === "" || COUNT < 0) ? entry.defaultCount : COUNT;
-
-      if (drawCount === 0) return;
-
-      const glMode = gl3d[MODE] || gl3d.TRIANGLES;
+      let drawCount = COUNT;
+      if (drawCount === "" || drawCount === null || drawCount === -1 || drawCount === undefined) {
+        drawCount = entry.defaultCount;
+      }
       if (entry.hasElements) {
-        gl3d.drawElements(glMode, drawCount, entry.elementType, 0);
+        gl3d.drawElements(
+          gl3d[MODE] || gl3d.TRIANGLES,
+          drawCount,
+          entry.elementType || gl3d.UNSIGNED_SHORT,
+          0
+        );
       } else {
-        gl3d.drawArrays(glMode, 0, drawCount);
+        gl3d.drawArrays(gl3d[MODE] || gl3d.TRIANGLES, 0, drawCount);
       }
       gl3d.bindVertexArray(null);
     }
@@ -1301,7 +1252,7 @@ var V3D_TexturePool = {
     gl_BindTexture({ TEX, UNIT }) {
       gl3d.activeTexture(gl3d.TEXTURE0 + UNIT);
 
-      const texObject = V3D_TexturePool.get(TEX);
+      const texObject = textures.get(TEX);
 
       if (texObject instanceof WebGLTexture) {
         gl3d.bindTexture(gl3d.TEXTURE_2D, texObject);
@@ -1313,7 +1264,7 @@ var V3D_TexturePool = {
       const slot = (parseInt(UNIT) || 0);
       gl3d.activeTexture(gl3d.TEXTURE0 + slot);
 
-      const texObject = V3D_TexturePool.get(TEX);
+      const texObject = textures.get(TEX);
 
       if (texObject instanceof WebGLTexture) {
         gl3d.bindTexture(gl3d.TEXTURE_CUBE_MAP, texObject);
@@ -1326,7 +1277,7 @@ var V3D_TexturePool = {
       }
     }
     tex_SetFilter({ TEX, MODE }) {
-      const texObject = V3D_TexturePool.get(TEX);
+      const texObject = textures.get(TEX);
       if (!texObject) return;
 
       const modeMap = {
@@ -1340,7 +1291,7 @@ var V3D_TexturePool = {
       gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_MAG_FILTER, modeMap[MODE]);
     }
     tex_SetWrap({ TEX, AXIS, MODE }) {
-      const texObject = V3D_TexturePool.get(TEX);
+      const texObject = textures.get(TEX);
       if (!texObject) return;
 
       const axisMap = { "S": gl3d.TEXTURE_WRAP_S, "T": gl3d.TEXTURE_WRAP_T };
@@ -1350,7 +1301,7 @@ var V3D_TexturePool = {
       gl3d.texParameteri(gl3d.TEXTURE_2D, axisMap[AXIS], modeMap[MODE]);
     }
     tex_GenerateMipmap({ TEX }) {
-      const texObject = V3D_TexturePool.get(TEX);
+      const texObject = textures.get(TEX);
       if (!texObject) {
         console.warn(`Vapor3D: Cannot generate mipmap, texture "${TEX}" not found.`);
         return;
@@ -1362,7 +1313,7 @@ var V3D_TexturePool = {
       return (vm.editingTarget ? vm.editingTarget.getCostumes() : []).map(c => c.name);
     }
     tex_CreateEmpty({ NAME, W, H, FORMAT }) {
-      if (V3D_TexturePool.has(NAME)) return;
+      if (textures.has(NAME)) return;
       const conf = _getFormatConfig(FORMAT);
 
       const tex = gl3d.createTexture();
@@ -1374,12 +1325,12 @@ var V3D_TexturePool = {
       gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_WRAP_S, gl3d.CLAMP_TO_EDGE);
       gl3d.texParameteri(gl3d.TEXTURE_2D, gl3d.TEXTURE_WRAP_T, gl3d.CLAMP_TO_EDGE);
 
-      V3D_TexturePool.set(NAME, tex);
-      V3D_TexturePool.set(NAME + "_info", { w: W, h: H });
+      textures.set(NAME, tex);
+      textures.set(NAME + "_info", { w: W, h: H });
     }
     async tex_LoadFromCostume({ C, NAME }, { target }) {
 
-      if (V3D_TexturePool.has(NAME)) return;
+      if (textures.has(NAME)) return;
 
       const cost = target.sprite.costumes.find(c => c.name === C);
       if (!cost) {
@@ -1387,7 +1338,7 @@ var V3D_TexturePool = {
         return;
       }
 
-      V3D_TexturePool.set(NAME, "loading");
+      textures.set(NAME, "loading");
 
       try {
         // Uint8Array
@@ -1413,20 +1364,20 @@ var V3D_TexturePool = {
 
         bitmap.close();
 
-        V3D_TexturePool.set(NAME, tex);
+        textures.set(NAME, tex);
         console.log(`Vapor3D: Texture [${NAME}] loaded successfully (Async).`);
 
       } catch (e) {
-        V3D_TexturePool.delete(NAME);
+        textures.delete(NAME);
         console.error(`Vapor3D: Failed to load texture [${NAME}]:`, e);
       }
     }
     async tex_LoadFromURL({ U, NAME }) {
-      if (V3D_TexturePool.has(NAME)) return;
+      if (textures.has(NAME)) return;
       const urlString = String(U).trim();
       if (!urlString) return;
 
-      V3D_TexturePool.set(NAME, "loading");
+      textures.set(NAME, "loading");
 
       try {
         const uint8Data = await fetchBinaryData(urlString);
@@ -1449,16 +1400,16 @@ var V3D_TexturePool = {
         gl3d.texImage2D(gl3d.TEXTURE_2D, 0, gl3d.RGBA, gl3d.RGBA, gl3d.UNSIGNED_BYTE, bitmap);
 
         bitmap.close();
-        V3D_TexturePool.set(NAME, tex);
+        textures.set(NAME, tex);
 
         console.log(`Vapor3D: Texture [${NAME}] loaded from URL successfully.`);
       } catch (e) {
-        V3D_TexturePool.delete(NAME);
+        textures.delete(NAME);
         console.error(`Vapor3D: Failed to load URL texture [${NAME}]:`, e);
       }
     }
     async tex_LoadFromBuffer({ NAME, ID }) {
-      if (V3D_TexturePool.has(NAME) && V3D_TexturePool.get(NAME) !== "loading") return;
+      if (textures.has(NAME) && textures.get(NAME) !== "loading") return;
       if (!ID) return;
 
       const registry = window.Vapor3D_Registry;
@@ -1467,7 +1418,7 @@ var V3D_TexturePool = {
         return;
       }
 
-      V3D_TexturePool.set(NAME, "loading");
+      textures.set(NAME, "loading");
       const data = registry.get(ID);
 
       try {
@@ -1498,20 +1449,20 @@ var V3D_TexturePool = {
 
         bitmap.close();
 
-        V3D_TexturePool.set(NAME, tex);
+        textures.set(NAME, tex);
         console.log(`Vapor3D: Texture [${NAME}] loaded from [${ID}] successfully.`);
 
       } catch (e) {
-        V3D_TexturePool.delete(NAME);
+        textures.delete(NAME);
         console.error(`Vapor3D: Failed to load Buffer texture [${NAME}]:`, e);
       }
     }
     async tex_LoadKTXFromURL({ U, NAME }) {
-      if (V3D_TexturePool.has(NAME)) return;
+      if (textures.has(NAME)) return;
       const urlString = String(U).trim();
       if (!urlString) return;
 
-      V3D_TexturePool.set(NAME, "loading");
+      textures.set(NAME, "loading");
 
       try {
         const uint8Data = await fetchBinaryData(urlString);
@@ -1552,19 +1503,19 @@ var V3D_TexturePool = {
         gl3d.texParameteri(gl3d.TEXTURE_CUBE_MAP, gl3d.TEXTURE_WRAP_T, gl3d.CLAMP_TO_EDGE);
         gl3d.texParameteri(gl3d.TEXTURE_CUBE_MAP, gl3d.TEXTURE_WRAP_R, gl3d.CLAMP_TO_EDGE);
 
-        V3D_TexturePool.set(NAME, tex);
+        textures.set(NAME, tex);
         console.log(`Vapor3D: KTX Cubemap [${NAME}] loaded successfully.`);
       } catch (e) {
-        V3D_TexturePool.delete(NAME);
+        textures.delete(NAME);
         console.error(`Vapor3D: KTX Load Error:`, e);
       }
     }
     tex_Destroy({ NAME }) {
-      const item = V3D_TexturePool.cache.get(NAME);
+      const item = texturePool.cache.get(NAME);
       if (item) {
-        V3D_TexturePool.delete(item.id);
+        textures.delete(item.id);
       }
-      V3D_TexturePool.destroy(NAME);
+      texturePool.destroy(NAME);
     }
 
     m4_Identity() {
