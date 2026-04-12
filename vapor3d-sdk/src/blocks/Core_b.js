@@ -1,0 +1,96 @@
+export const CoreMenus = {
+        clearMenu: ["COLOR_BUFFER_BIT", "DEPTH_BUFFER_BIT", "STENCIL_BUFFER_BIT", "ALL"],
+        drawMode: ["TRIANGLES", "TRIANGLE_STRIP", "LINES", "POINTS"],
+        capMenu: ["DEPTH_TEST", "STENCIL_TEST", "BLEND", "CULL_FACE"],
+        axisMenu: ["X", "Y", "Z"],
+        v3OpMenu: ["+", "-", "mul"],
+        v3CompMenu: ["X", "Y", "Z"],
+        costumeMenu: { acceptReporters: true, items: "tex_getCostumes" },
+        listMenu: { acceptReporters: true, items: "getAllLists" },
+        texTypeMenu: [
+                "RGB16F", "RGBA16F", "RGB32F", "RGB8", "RGBA8",
+                "R11G11B10F", "R16F", "RG16F", "DEPTH24_STENCIL8", "DEPTH_COMPONENT24"
+        ],
+        fboSlotMenu: ["COLOR_ATTACHMENT0", "COLOR_ATTACHMENT1", "COLOR_ATTACHMENT2", "COLOR_ATTACHMENT3", "DEPTH_STENCIL_ATTACHMENT", "DEPTH_ATTACHMENT"],
+        depthMenu: ["RBO", "TEXTURE", "NONE"],
+        filterMode: ["NEAREST", "LINEAR", "NEAREST_MIPMAP_NEAREST", "LINEAR_MIPMAP_NEAREST", "NEAREST_MIPMAP_LINEAR", "LINEAR_MIPMAP_LINEAR"],
+        wrapAxis: ["S", "T"],
+        wrapMode: ["REPEAT", "CLAMP_TO_EDGE", "MIRRORED_REPEAT"],
+        boolMenu: ["true", "false"],
+        funcMenu: ["NEVER", "LESS", "EQUAL", "LEQUAL", "GREATER", "NOTEQUAL", "GEQUAL", "ALWAYS"],
+        opMenu: { acceptReporters: true, items: [{ text: "KEEP", value: "KEEP" }, { text: "ZERO", value: "ZERO" }, { text: "REPLACE", value: "REPLACE" }, { text: "INCR", value: "INCR" }, { text: "DECR", value: "DECR" }, { text: "INVERT", value: "INVERT" }, { text: "INCR_WRAP", value: "INCR_WRAP" }, { text: "DECR_WRAP", value: "DECR_WRAP" }] },
+        faceMenu: { acceptReporters: true, items: [{ text: "FRONT", value: "FRONT" }, { text: "BACK", value: "BACK" }, { text: "FRONT_AND_BACK", value: "FRONT_AND_BACK" }] },
+        blendMenu: ["ZERO", "ONE", "SRC_COLOR", "ONE_MINUS_SRC_COLOR", "DST_COLOR", "ONE_MINUS_DST_COLOR", "SRC_ALPHA", "ONE_MINUS_SRC_ALPHA", "DST_ALPHA", "ONE_MINUS_DST_ALPHA", "CONSTANT_COLOR", "ONE_MINUS_CONSTANT_COLOR"],
+        attrMenu: [
+                { text: 'position', value: 'position' },
+                { text: 'normal', value: 'normal' },
+                { text: 'v', value: 'uv' },
+                { text: 'tangent', value: 'tangent' },
+                { text: 'color', value: 'color' }
+        ]
+};
+
+export const CoreBlocks = [
+        { blockType: "label", text: "WebGL" },
+        { opcode: "gl_Init", blockType: "command", text: "init WebGL" },
+        { opcode: "gl_ResetResources", blockType: "command", text: "reset all" },
+
+        "---",
+        { blockType: "label", text: "Shader" },
+
+        { opcode: "shader_Create", blockType: "command", text: "create shader [ID] VS [VS] FS [FS]", arguments: { ID: { type: "string" }, VS: { type: "string" }, FS: { type: "string" } } },
+        { opcode: "shader_Use", blockType: "command", text: "shader.use([ID])", arguments: { ID: { type: "string" } } },
+        { opcode: "shader_SetMat4", blockType: "command", text: "shader [ID] setMat4 [NAME] [VAL]", arguments: { ID: { type: "string" }, NAME: { type: "string" }, VAL: { type: "string" } } },
+        { opcode: "shader_SetVec3", blockType: "command", text: "shader [ID] setVec3 [NAME] X [X] Y [Y] Z [Z]", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number" }, Y: { type: "number" }, Z: { type: "number" } } },
+        { opcode: "shader_SetVec2", blockType: "command", text: "shader [ID] setVec2 [NAME] X [X] Y [Y]", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number", defaultValue: 0 }, Y: { type: "number", defaultValue: 0 } } },
+        { opcode: "shader_SetFloat", blockType: "command", text: "shader [ID] setFloat [NAME] to [V]", arguments: { ID: { type: "string" }, NAME: { type: "string" }, V: { type: "number", defaultValue: 0 } } },
+        { opcode: "shader_SetInt", blockType: "command", text: "shader [ID] setInt [NAME] [V]", arguments: { ID: { type: "string" }, NAME: { type: "string" }, V: { type: "number" } } },
+
+
+        "---",
+        { blockType: "label", text: "Framebuffer" },
+
+        { opcode: "fbo_Create", blockType: "command", text: "create FBO [ID]", arguments: { ID: { type: "string", defaultValue: "fbo1" } } },
+        { opcode: "fbo_AttachTexture", blockType: "command", text: "FBO [ID] attach texture [TEX] to [SLOT]", arguments: { ID: { type: "string", defaultValue: "fbo1" }, TEX: { type: "string", defaultValue: "renderTarget1" }, SLOT: { type: "string", menu: "fboSlotMenu", defaultValue: "COLOR_ATTACHMENT0" } } },
+        { opcode: "fbo_Bind", blockType: "command", text: "glBindFramebuffer [ID]", arguments: { ID: { type: "string", defaultValue: "null" } } },
+
+        "---",
+        { blockType: "label", text: "Vertex Array Object" },
+        { opcode: "vao_CreateScreenQuad", blockType: "command", text: "create Quad [ID]", arguments: { ID: { type: "string", defaultValue: "screenQuad" } } },
+        { opcode: "vao_CreateCube", blockType: "command", text: "create Cube [ID]", arguments: { ID: { type: "string", defaultValue: "cube" } } },
+        { opcode: "vao_CreateSphere", blockType: "command", text: "create Sphere [ID] Lat [LAT] Lon [LON]", arguments: { ID: { type: "string", defaultValue: "lightSphere" }, LAT: { type: "number", defaultValue: 16 }, LON: { type: "number", defaultValue: 16 } } },
+        { opcode: "vao_CreateEmpty", blockType: "command", text: "create VAO [ID]", arguments: { ID: { type: "string", defaultValue: "sample" } } },
+        { opcode: "vao_SetAttrFromExchange", blockType: "command", text: "VAO [ID] bind attr [LOC] size [SIZE] from model [NAME] mesh [IDX] [ATTR]", arguments: { ID: { type: "string", defaultValue: "vao1" }, LOC: { type: "number", defaultValue: 0 }, SIZE: { type: "number", defaultValue: 3 }, NAME: { type: "string", defaultValue: "sample" }, IDX: { type: "number", defaultValue: 0 }, ATTR: { type: "string", menu: "attrMenu", defaultValue: "position" } } },
+        { opcode: "vao_SetIndicesFromExchange", blockType: "command", text: "VAO [ID] bind index from [NAME] mesh [IDX]", arguments: { ID: { type: "string", defaultValue: "vao1" }, NAME: { type: "string", defaultValue: "sample" }, IDX: { type: "number", defaultValue: 0 } } },
+        { opcode: "gl_Draw", blockType: "command", text: "glDraw [ID] count [COUNT] mode [MODE]", arguments: { ID: { type: "string", defaultValue: "sample" }, COUNT: { type: "number" }, MODE: { type: "string", menu: "drawMode" } } },
+        { opcode: "vao_Destroy", blockType: "command", text: "destroy VAO [ID]", arguments: { ID: { type: "string", defaultValue: "sample" } } },
+
+        "---",
+        { blockType: "label", text: "Texture" },
+        { opcode: "tex_CreateEmpty", blockType: "command", text: "create empty texture [NAME] size [W]x[H] format [FORMAT]", arguments: { NAME: { type: "string", defaultValue: "rt1" }, W: { type: "number", defaultValue: 480 }, H: { type: "number", defaultValue: 360 }, FORMAT: { type: "string", menu: "texTypeMenu", defaultValue: "RGB8" } } },
+        { opcode: "tex_LoadFromCostume", blockType: "command", text: "load texture [NAME] from costume [C]", arguments: { C: { type: "string", menu: "costumeMenu" }, NAME: { type: "string", defaultValue: "tex1" } } },
+        { opcode: "tex_LoadFromURL", blockType: "command", text: "load texture [NAME] from URL [U]", arguments: { U: { type: "string", defaultValue: "https://.../img.jpg" }, NAME: { type: "string", defaultValue: "texURL1" } } },
+        { opcode: "tex_LoadKTXFromURL", blockType: "command", text: "load KTX cubemap [NAME] from URL [U]", arguments: { NAME: { type: "string", defaultValue: "prefilterMap" }, U: { type: "string" } } },
+        { opcode: "tex_Destroy", blockType: "command", text: "destroy texture [NAME]", arguments: { NAME: { type: "string" } } },
+        { opcode: "gl_BindTexture", blockType: "command", text: "glActiveTexture [UNIT] bind [TEX]", arguments: { TEX: { type: "string" }, UNIT: { type: "number", defaultValue: 0 } } },
+        { opcode: "gl_BindCubemap", blockType: "command", text: "glActiveTexture [UNIT] bind Cubemap [TEX]", arguments: { TEX: { type: "string", defaultValue: "prefilterMap" }, UNIT: { type: "number", defaultValue: 0 } } },
+        { opcode: "tex_GenerateMipmap", blockType: "command", text: "glGenerateMipmap [TEX]", arguments: { TEX: { type: "string" } } },
+        { opcode: "tex_SetFilter", blockType: "command", text: "set texture [TEX] filter mode [MODE]", arguments: { TEX: { type: "string" }, MODE: { type: "string", menu: "filterMode" } } },
+        { opcode: "tex_SetWrap", blockType: "command", text: "set texture [TEX] wrap mode [AXIS] [MODE]", arguments: { TEX: { type: "string" }, AXIS: { type: "string", menu: "wrapAxis" }, MODE: { type: "string", menu: "wrapMode" } } },
+
+        "---",
+        { blockType: "label", text: "GL States" },
+        { opcode: "gl_Clear", blockType: "command", text: "glClear [BIT]", arguments: { BIT: { type: "string", menu: "clearMenu" } } },
+        { opcode: "gl_SetClearColor", blockType: "command", text: "glClearColor R [R] G [G] B [B] A [A]", arguments: { R: { type: "number" }, G: { type: "number" }, B: { type: "number" }, A: { type: "number" } } },
+        { opcode: "gl_Present", blockType: "command", text: "update layer" },
+        { opcode: "st_Enable", blockType: "command", text: "glEnable [CAP]", arguments: { CAP: { type: "string", menu: "capMenu" } } },
+        { opcode: "st_Disable", blockType: "command", text: "glDisable [CAP]", arguments: { CAP: { type: "string", menu: "capMenu" } } },
+        { opcode: "st_CullFace", blockType: "command", text: "glCullFace [MODE]", arguments: { MODE: { type: "string", menu: "faceMenu", defaultValue: "BACK" } } },
+        { opcode: "st_ColorMask", blockType: "command", text: "glColorMask [STATE]", arguments: { STATE: { type: "string", menu: "boolMenu" } } },
+        { opcode: "st_BlendFuncSeparate", blockType: "command", text: "glBlendFuncSeparate [SRGB] [DRGB] [SA] [DA]", arguments: { SRGB: { type: "string", menu: "blendMenu", defaultValue: "ONE" }, DRGB: { type: "string", menu: "blendMenu", defaultValue: "ONE" }, SA: { type: "string", menu: "blendMenu", defaultValue: "ZERO" }, DA: { type: "string", menu: "blendMenu", defaultValue: "ONE" } } },
+        { opcode: "st_DepthMask", blockType: "command", text: "glDepthMask [STATE]", arguments: { STATE: { type: "string", menu: "boolMenu", defaultValue: "true" } } },
+        { opcode: "st_DepthFunc", blockType: "command", text: "glDepthFunc [FUNC]", arguments: { FUNC: { type: "string", menu: "funcMenu", defaultValue: "LESS" } } },
+        { opcode: "st_StencilMask", blockType: "command", text: "glStencilMask [MASK]", arguments: { MASK: { type: "number", defaultValue: 255 } } },
+        { opcode: "st_StencilOp", blockType: "command", text: "glStencilOp [FACE] fail [SF] zfail [DF] zpass [DP]", arguments: { FACE: { type: "string", menu: "faceMenu", defaultValue: "FRONT_AND_BACK" }, SF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, DF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, DP: { type: "string", menu: "opMenu", defaultValue: "KEEP" } } },
+        { opcode: "st_StencilFunc", blockType: "command", text: "glStencilFunc [FUNC] ref [REF] mask [MASK]", arguments: { FUNC: { type: "string", menu: "funcMenu", defaultValue: "ALWAYS" }, REF: { type: "number", defaultValue: 0 }, MASK: { type: "number", defaultValue: 255 } } },
+];
