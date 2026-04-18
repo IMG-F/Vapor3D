@@ -1,46 +1,58 @@
-import { CoreBlocks, CoreMenus } from './blocks/Core_b.js';
-import { LoaderBlocks, LoaderMenus } from './blocks/Loader_b.js';
-import {  MathBlocks } from './blocks/Math_b.js';
-import { Vapor3DCore } from './handlers/Core_h.js';
-import { Vapor3DLoader } from './handlers/Loader_h.js';
-import { Vapor3DMath } from './handlers/Math_h.js';
+import { EngineBlocks, EngineMenus } from './blocks/Engine_b.js';
+import { SceneBlocks } from './blocks/Scene_b.js';
+import { LoaderBlocks} from './blocks/Loader_b.js';
+import { Math3DBlocks } from './blocks/Math3D_b.js';
+
+import { EngineHandlers } from './handlers/Engine_h.js';
+import { SceneHandlers } from './handlers/Scene_h.js';
+import { LoaderHandlers } from './handlers/Loader_h.js';
+import { Math3DHandlers } from './handlers/Math3D_h.js';
 
 (function (Scratch) {
     "use strict";
     if (!Scratch.extensions.unsandboxed) throw new Error("Vapor3D must run unsandboxed");
 
     const vm = Scratch.vm;
+    const runtime = Scratch.vm.runtime;
 
     class Vapor3DExtension {
         constructor() {
-            this.coreHandlers = new Vapor3DCore(vm);
-            this.loaderHandlers = new Vapor3DLoader(this.coreHandlers);
-            this.mathHandlers = new Vapor3DMath();
+            // 所有 Handler
+            this.engineHandlers = new EngineHandlers(Scratch);
+            this.sceneHandlers = new SceneHandlers(this.engineHandlers);
+            this.loaderHandlers = new LoaderHandlers(this.engineHandlers, this.sceneHandlers);
+            this.mathHandlers = new Math3DHandlers();
 
+            runtime.on('PROJECT_STOP_ALL', () => {
+                console.log("Vapor3D: Project stopped. releasing all resources...");
+
+                this.sceneHandlers.Scene_Clear();
+                this.engineHandlers.gl_ResetResources();
+
+                /* 3. 将 3D 画布清空为透明（可选）
+                if (this.engineHandlers.core) {
+                    const gl = this.engineHandlers.core.gl;
+                    gl.clearColor(0, 0, 0, 0);
+                    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
+                }
+                */
+            });
+
+            // 绑定所有 Handler 方法到扩展实例
             const bindMethods = (instance) => {
                 const proto = Object.getPrototypeOf(instance);
                 Object.getOwnPropertyNames(proto).forEach(method => {
-                    if (method !== 'constructor') {
+                    if (method !== 'constructor' && typeof instance[method] === 'function') {
                         this[method] = instance[method].bind(instance);
                     }
                 });
             };
-            bindMethods(this.coreHandlers);
+
+            bindMethods(this.engineHandlers);
+            bindMethods(this.sceneHandlers);
             bindMethods(this.loaderHandlers);
             bindMethods(this.mathHandlers);
         }
-
-        tex_getCostumes() {
-            if (!vm || !vm.editingTarget) return ["Null"];
-
-            try {
-                return vm.editingTarget.getCostumes().map(e => e.name);
-            } catch (e) {
-                return ["Loading"];
-            }
-        }
-
-        
 
         getInfo() {
             return {
@@ -49,17 +61,25 @@ import { Vapor3DMath } from './handlers/Math_h.js';
                 color1: "#2f2f36",
                 hideFromPalette: true,
                 blocks: [
-                    ...CoreBlocks,
+                    ...EngineBlocks,
                     "---",
-                    ...MathBlocks,
+                    ...SceneBlocks,
                     "---",
-                    ...LoaderBlocks
+                    ...LoaderBlocks,
+                    "---",
+                    ...Math3DBlocks
                 ],
-                menus: { ...CoreMenus, ...LoaderMenus }
+                menus: {
+                    ...EngineMenus,
+                }
             };
         }
     }
+    
 
+    // ==========================================
+    // 包映射，侧边栏分类注入
+    // ==========================================
     const originalGetBlocksXML = vm.runtime.getBlocksXML;
 
     vm.runtime.getBlocksXML = function (target) {
@@ -71,15 +91,15 @@ import { Vapor3DMath } from './handlers/Math_h.js';
 
             const allBlocks = ext.blocks;
 
-            // 包映射
+            // 定义子类别映射
             const groupDefinitions = [
-                { name: "Core", data: CoreBlocks, color: "#2f2f36" },
-                { name: "Math", data: MathBlocks, color: "#2f2f36" },
-                { name: "Loader", data: LoaderBlocks, color: "#2f2f36" }
+                { name: "Engine", data: EngineBlocks, color: "#2f2f36" },
+                { name: "Scene", data: SceneBlocks, color: "#3a3a42" },
+                { name: "Loader", data: LoaderBlocks, color: "#45454d" },
+                { name: "Math", data: Math3DBlocks, color: "#505058" }
             ];
 
-            // 清空原有结果中可能存在的重复项（可选，取决于你是否设置了 hideFromPalette）
-            // 直接把子类别 push 进 res
+            // 构建每个子类别的 XML
             groupDefinitions.forEach(group => {
                 const groupXml = group.data.map(def => {
                     if (def === "---") return '<sep gap="36"/>';
@@ -88,7 +108,13 @@ import { Vapor3DMath } from './handlers/Math_h.js';
                     }
                     if (def.opcode) {
                         const b = allBlocks.find(ab => ab.info.opcode === def.opcode);
-                        return b ? b.xml : '';
+
+                        if (!b) {
+                            console.error(`Vapor3D XML："${def.opcode}"loading failed`);
+                            return '';
+                        }
+
+                        return b.xml || '';
                     }
                     return '';
                 }).join('');
@@ -96,20 +122,18 @@ import { Vapor3DMath } from './handlers/Math_h.js';
                 if (groupXml) {
                     res.push({
                         id: `v3d_cat_${group.name.toLowerCase()}`,
-                        xml: `<category name="${group.name}" id="v3d_cat_${group.name.toLowerCase()}" colour="${group.color}" secondaryColour="${group.color}">
-                                ${groupXml}
-                              </category>`
+                        xml: `<category name="${group.name}" id="v3d_cat_${group.name.toLowerCase()}" colour="${group.color}" secondaryColour="${group.color}">${groupXml}</category>`
                     });
                 }
             });
+
+            // 只显示注入的子类别
+            return res.filter(item => item.id !== "vapor3D");
         } catch (e) {
             console.error("[V3D] Category Injection Error:", e);
         }
-
-        // 5. 必须返回 res，否则侧边栏就是空的！
         return res;
     };
 
-    // --- 最后注册扩展 ---
     Scratch.extensions.register(new Vapor3DExtension());
 })(Scratch);
