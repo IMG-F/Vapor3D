@@ -9,3 +9,4 @@ export { Math3D } from './Math3D.js';
 export { Model, Mesh, Material } from './Model.js';
 export { Scene } from './Scene.js';
 export { Loader } from './Loader.js';
+export{  CubeCamera } from './CubeCamera.js';

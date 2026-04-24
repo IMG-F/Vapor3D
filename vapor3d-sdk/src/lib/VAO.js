@@ -55,4 +55,48 @@ export class VAO {
         if (this.ebo) this.gl.deleteBuffer(this.ebo);
         this.gl.deleteVertexArray(this.id);
     }
+
+    // 静态预制件生成
+    static createScreenQuad(gl) {
+        const vao = new VAO(gl);
+        vao.addBuffer(new Float32Array([-1, 1, 0, -1, -1, 0, 1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]), 0, 3);
+        vao.addBuffer(new Float32Array([0, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 0]), 1, 2);
+        vao.defaultCount = 6;
+        return vao;
+    }
+
+    static createCube(gl) {
+        const vao = new VAO(gl);
+        const v = [-1, -1, 1, 1, -1, 1, 1, 1, 1, -1, 1, 1, -1, -1, -1, 1, -1, -1, 1, 1, -1, -1, 1, -1];
+        const i = [0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5, 1, 1, 0, 4];
+        vao.addBuffer(new Float32Array(v), 0, 3);
+        vao.setIndices(new Uint16Array(i));
+        vao.defaultCount = 36;
+        return vao;
+    }
+
+    static createSphere(gl, lat = 16, lon = 16) {
+        const latBands = Math.max(3, parseInt(lat) || 16);
+        const lonBands = Math.max(3, parseInt(lon) || 16);
+        const pos = []; const indices = [];
+        for (let i = 0; i <= latBands; i++) {
+            const theta = (i * Math.PI) / latBands;
+            const sinTheta = Math.sin(theta); const cosTheta = Math.cos(theta);
+            for (let j = 0; j <= lonBands; j++) {
+                const phi = (j * 2 * Math.PI) / lonBands;
+                pos.push(Math.cos(phi) * sinTheta, cosTheta, Math.sin(phi) * sinTheta);
+            }
+        }
+        for (let i = 0; i < latBands; i++) {
+            for (let j = 0; j < lonBands; j++) {
+                const first = i * (lonBands + 1) + j; const second = first + lonBands + 1;
+                indices.push(first, first + 1, second, second, first + 1, second + 1);
+            }
+        }
+        const vao = new VAO(gl);
+        vao.addBuffer(new Float32Array(pos), 0, 3);
+        vao.setIndices(new Uint16Array(indices));
+        vao.defaultCount = indices.length;
+        return vao;
+    }
 }

@@ -12,7 +12,7 @@ export default defineConfig({
     lib: {
       entry: resolve(__dirname, 'src/index.js'),
       name: 'Vapor3D',
-      fileName: 'index',
+      fileName: 'vapor3d',
       formats: ['iife']
     },
     outDir: 'dist',

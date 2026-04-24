@@ -4,7 +4,7 @@ export const SceneBlocks = [
     {
         opcode: "Scene_Create",
         blockType: "command",
-        text: "Scene [ID] .create()",
+        text: "new Scene [ID] ()",
         arguments: {
             ID: { type: "string", defaultValue: "Main" }
         }
@@ -30,7 +30,7 @@ export const SceneBlocks = [
 
 
 
-    { blockType: "label", text: "Model Assets" },
+    { blockType: "label", text: "Model Assets" }, // Models
     {
         opcode: "Scene_GetMeshCount",
         blockType: "reporter",
@@ -40,25 +40,6 @@ export const SceneBlocks = [
             MODEL: { type: "string", defaultValue: "sample" }
         }
     },
-
-
-
-    { blockType: "label", text: "Draw Call" },
-    {
-        opcode: "Scene_MeshDraw",
-        blockType: "command",
-        text: "Scene [SCENE_ID] .models[MODEL] .meshes[IDX] .vao .draw([MODE])",
-        arguments: {
-            SCENE_ID: { type: "string", defaultValue: "Main" },
-            MODEL: { type: "string", defaultValue: "sample" },
-            IDX: { type: "number", defaultValue: 0 },
-            MODE: { type: "string", menu: "drawMode" }
-        }
-    },
-
-
-
-    { blockType: "label", text: "Material" },
     {
         opcode: "Scene_MeshBindTex",
         blockType: "command",
@@ -81,5 +62,22 @@ export const SceneBlocks = [
             IDX: { type: "number", defaultValue: 0 },
             PARAM: { type: "string", menu: "pbrParamMenu" }
         }
-    }
+    },
+
+
+
+    { blockType: "label", text: "Draw Call" }, // Draw Call
+    {
+        opcode: "Scene_MeshDraw",
+        blockType: "command",
+        text: "Scene [SCENE_ID] .models[MODEL] .meshes[IDX] .vao .draw([MODE])",
+        arguments: {
+            SCENE_ID: { type: "string", defaultValue: "Main" },
+            MODEL: { type: "string", defaultValue: "sample" },
+            IDX: { type: "number", defaultValue: 0 },
+            MODE: { type: "string", menu: "drawMode" }
+        }
+    },
+    
+    "---", "---",
 ];

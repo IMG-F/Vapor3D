@@ -2,11 +2,15 @@ import { EngineBlocks, EngineMenus } from './blocks/Engine_b.js';
 import { SceneBlocks } from './blocks/Scene_b.js';
 import { LoaderBlocks} from './blocks/Loader_b.js';
 import { Math3DBlocks } from './blocks/Math3D_b.js';
+import { CubeCameraBlocks} from './blocks/CubeCamera_b.js';
+import { TextBlocks } from './blocks/Text_b.js';
 
 import { EngineHandlers } from './handlers/Engine_h.js';
 import { SceneHandlers } from './handlers/Scene_h.js';
 import { LoaderHandlers } from './handlers/Loader_h.js';
 import { Math3DHandlers } from './handlers/Math3D_h.js';
+import { CubeCameraHandlers } from './handlers/CubeCamera_h.js';
+import { TextHandlers } from './handlers/Text_h.js';
 
 (function (Scratch) {
     "use strict";
@@ -14,6 +18,7 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
 
     const vm = Scratch.vm;
     const runtime = Scratch.vm.runtime;
+    const Cast = Scratch.Cast;
 
     class Vapor3DExtension {
         constructor() {
@@ -22,6 +27,8 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
             this.sceneHandlers = new SceneHandlers(this.engineHandlers);
             this.loaderHandlers = new LoaderHandlers(this.engineHandlers, this.sceneHandlers);
             this.mathHandlers = new Math3DHandlers();
+            this.cubeCameraHandlers = new CubeCameraHandlers();
+            this.testHandlers = new TextHandlers(this.engineHandlers, Cast);
 
             runtime.on('PROJECT_STOP_ALL', () => {
                 console.log("Vapor3D: Project stopped. releasing all resources...");
@@ -29,7 +36,7 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
                 this.sceneHandlers.Scene_Clear();
                 this.engineHandlers.gl_ResetResources();
 
-                /* 3. 将 3D 画布清空为透明（可选）
+                /*
                 if (this.engineHandlers.core) {
                     const gl = this.engineHandlers.core.gl;
                     gl.clearColor(0, 0, 0, 0);
@@ -52,6 +59,8 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
             bindMethods(this.sceneHandlers);
             bindMethods(this.loaderHandlers);
             bindMethods(this.mathHandlers);
+            bindMethods(this.cubeCameraHandlers);
+            bindMethods(this.testHandlers);
         }
 
         getInfo() {
@@ -67,7 +76,11 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
                     "---",
                     ...LoaderBlocks,
                     "---",
-                    ...Math3DBlocks
+                    ...Math3DBlocks,
+                    "---",
+                    ...CubeCameraBlocks,
+                    "---",
+                    ...TextBlocks,
                 ],
                 menus: {
                     ...EngineMenus,
@@ -96,7 +109,9 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
                 { name: "Engine", data: EngineBlocks, color: "#2f2f36" },
                 { name: "Scene", data: SceneBlocks, color: "#3a3a42" },
                 { name: "Loader", data: LoaderBlocks, color: "#45454d" },
-                { name: "Math", data: Math3DBlocks, color: "#505058" }
+                { name: "CubeCamera", data: CubeCameraBlocks, color: "#505058" },
+                { name: "Math", data: Math3DBlocks, color: "#5a5a63" },
+                { name: "Text", data: TextBlocks, color: "#6d6d77" },
             ];
 
             // 构建每个子类别的 XML
@@ -113,10 +128,10 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
                             console.error(`Vapor3D XML："${def.opcode}"loading failed`);
                             return '';
                         }
-
                         return b.xml || '';
                     }
                     return '';
+
                 }).join('');
 
                 if (groupXml) {
@@ -130,7 +145,7 @@ import { Math3DHandlers } from './handlers/Math3D_h.js';
             // 只显示注入的子类别
             return res.filter(item => item.id !== "vapor3D");
         } catch (e) {
-            console.error("[V3D] Category Injection Error:", e);
+            console.error("Vapor3D: Category Injection Error:", e);
         }
         return res;
     };

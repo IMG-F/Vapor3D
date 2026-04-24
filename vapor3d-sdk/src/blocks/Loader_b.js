@@ -18,7 +18,7 @@ export const LoaderBlocks = [
     {
         opcode: "Loader_load_texture_url",
         blockType: "command",
-        text: "Loader.loadTexture([U]) as [NAME]",
+        text: "Loader.loadTexture( [U] , [NAME] )",
         arguments: {
             U: { type: "string", defaultValue: "https://..." },
             NAME: { type: "string", defaultValue: "texURL1" }
@@ -27,7 +27,7 @@ export const LoaderBlocks = [
     {
         opcode: "Loader_load_texture_costume",
         blockType: "command",
-        text: "Loader.loadTextureFromCostume([C]) as [NAME]",
+        text: "Loader.loadTextureFromCostume( [C]) , [NAME] )",
         arguments: {
             C: { type: "string", menu: "costumeMenu" },
             NAME: { type: "string", defaultValue: "texCostume1" }
@@ -36,10 +36,11 @@ export const LoaderBlocks = [
     {
         opcode: "Loader_load_ktx_url",
         blockType: "command",
-        text: "Loader.loadKTX([U]) as [NAME]",
+        text: "Loader.loadKTX( [U]) , [NAME] )",
         arguments: {
             U: { type: "string", defaultValue: "https://..." },
             NAME: { type: "string", defaultValue: "envMap1" }
         }
     },
+    "---", "---",
 ];

@@ -34,7 +34,7 @@ export const EngineMenus = {
                 { text: 'v', value: 'uv' },
                 { text: 'tangent', value: 'tangent' },
                 { text: 'color', value: 'color' }
-        ]
+        ],
 };
 
 
@@ -45,35 +45,36 @@ export const EngineBlocks = [
         { opcode: "gl_Present", blockType: "command", text: "Core.updateLayer()" },
 
         { blockType: "label", text: "Shader" },
-        { opcode: "Shader_Create", blockType: "command", text: "Shader [ID] .create(VS:[VS], FS:[FS])", arguments: { ID: { type: "string" }, VS: { type: "string" }, FS: { type: "string" } } },
+        { opcode: "Shader_Create", blockType: "command", text: "new Shader [ID] ([VS], [FS])", arguments: { ID: { type: "string" }, VS: { type: "string" }, FS: { type: "string" } } },
         { opcode: "Shader_Use", blockType: "command", text: "Shader [ID] .use()", arguments: { ID: { type: "string" } } },
         { opcode: "Shader_SetMat4", blockType: "command", text: "Shader [ID] .setMat4([NAME], [VAL])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, VAL: { type: "string" } } },
-        { opcode: "Shader_SetVec3", blockType: "command", text: "Shader [ID] .setVec3([NAME], X:[X] Y:[Y] Z:[Z])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number" }, Y: { type: "number" }, Z: { type: "number" } } },
-        { opcode: "Shader_SetVec2", blockType: "command", text: "Shader [ID] .setVec2([NAME], X:[X] Y:[Y])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number" }, Y: { type: "number" } } },
+        { opcode: "Shader_SetVec3", blockType: "command", text: "Shader [ID] .setVec3([NAME], [X] [Y] [Z])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number" }, Y: { type: "number" }, Z: { type: "number" } } },
+        { opcode: "Shader_SetVec2", blockType: "command", text: "Shader [ID] .setVec2([NAME], [X] [Y])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, X: { type: "number" }, Y: { type: "number" } } },
         { opcode: "Shader_SetFloat", blockType: "command", text: "Shader [ID] .setFloat([NAME], [V])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, V: { type: "number" } } },
         { opcode: "Shader_SetInt", blockType: "command", text: "Shader [ID] .setInt([NAME], [V])", arguments: { ID: { type: "string" }, NAME: { type: "string" }, V: { type: "number" } } },
 
         { blockType: "label", text: "Framebuffer" },
-        { opcode: "FBO_Create", blockType: "command", text: "FBO [ID] .create()", arguments: { ID: { type: "string", defaultValue: "fbo1" } } },
+        { opcode: "FBO_Create", blockType: "command", text: "new FBO [ID] ()", arguments: { ID: { type: "string" } } },
         { opcode: "FBO_AttachTexture", blockType: "command", text: "FBO [ID] .attachTexture([TEX], [SLOT])", arguments: { ID: { type: "string" }, TEX: { type: "string" }, SLOT: { type: "string", menu: "fboSlotMenu" } } },
         { opcode: "FBO_AttachCubeTexture", blockType: "command", text: "FBO [ID] .attachCubemap([TEX], Face:[FACE_INDEX], [SLOT])", arguments: { ID: { type: "string" }, TEX: { type: "string" }, FACE_INDEX: { type: "number" }, SLOT: { type: "string", menu: "fboSlotMenu" } } },
         { opcode: "FBO_Bind", blockType: "command", text: "FBO [ID] .bind()", arguments: { ID: { type: "string", defaultValue: "null" } } },
 
         { blockType: "label", text: "Vertex Array Object" },
-        { opcode: "VAO_CreateScreenQuad", blockType: "command", text: "VAO [ID] .createQuad()", arguments: { ID: { type: "string", defaultValue: "screen" } } },
-        { opcode: "VAO_CreateCube", blockType: "command", text: "VAO [ID] .createCube()", arguments: { ID: { type: "string", defaultValue: "cube" } } },
-        { opcode: "VAO_CreateSphere", blockType: "command", text: "VAO [ID] .createSphere(Lat:[LAT], Lon:[LON])", arguments: { ID: { type: "string" }, LAT: { type: "number", defaultValue: 16 }, LON: { type: "number", defaultValue: 16 } } },
-        { opcode: "VAO_Draw", blockType: "command", text: "VAO [ID] .draw(Count:[COUNT], Mode:[MODE])", arguments: { ID: { type: "string" }, COUNT: { type: "number", defaultValue: -1 }, MODE: { type: "string", menu: "drawMode" } } },
+        { opcode: "VAO_CreateScreenQuad", blockType: "command", text: "VAO [ID] .setupQuad()", arguments: { ID: { type: "string", defaultValue: "screenQuad" } } },
+        { opcode: "VAO_CreateCube", blockType: "command", text: "VAO [ID] .setupCube()", arguments: { ID: { type: "string", defaultValue: "cube" } } },
+        { opcode: "VAO_CreateSphere", blockType: "command", text: "VAO [ID] .setupSphere([LAT], [LON])", arguments: { ID: { type: "string", defaultValue: "Sphere" }, LAT: { type: "number", defaultValue: 16 }, LON: { type: "number", defaultValue: 16 } } },
+        { opcode: "VAO_Draw", blockType: "command", text: "VAO [ID] .draw(Count:[COUNT], [MODE])", arguments: { ID: { type: "string" }, COUNT: { type: "number", defaultValue: -1 }, MODE: { type: "string", menu: "drawMode" } } },
         { opcode: "VAO_Destroy", blockType: "command", text: "VAO [ID] .destroy()", arguments: { ID: { type: "string" } } },
 
         { blockType: "label", text: "Texture" },
-        { opcode: "Texture_CreateEmpty", blockType: "command", text: "Texture2D [NAME] .createEmpty([W]x[H], [FORMAT])", arguments: { NAME: { type: "string" }, W: { type: "number" }, H: { type: "number" }, FORMAT: { type: "string", menu: "texTypeMenu" } } },
-        { opcode: "Texture_Bind", blockType: "command", text: "Texture [NAME] .bind(Unit:[UNIT])", arguments: { NAME: { type: "string" }, UNIT: { type: "number" } } },
-        { opcode: "Texture_BindCube", blockType: "command", text: "TextureCube [NAME] .bind(Unit:[UNIT])", arguments: { NAME: { type: "string" }, UNIT: { type: "number" } } },
+        { opcode: "Texture_CreateEmpty", blockType: "command", text: "new Texture2D [NAME] ([W], [H], [FORMAT])", arguments: { NAME: { type: "string", defaultValue: "texture2D" }, W: { type: "number", defaultValue: 256 }, H: { type: "number", defaultValue: 256 }, FORMAT: { type: "string", menu: "texTypeMenu" } } },
+        { opcode: "Texture_CreateEmptyCubemap", blockType: "command", text: "new TextureCube [NAME] ([SIZE], [FORMAT])", arguments: { NAME: { type: "string", defaultValue: "cubemap" }, SIZE: { type: "number", defaultValue: 256 }, FORMAT: { type: "string", menu: "texTypeMenu" } }},
+        { opcode: "Texture_Bind", blockType: "command", text: "Texture [NAME] .bind([UNIT])", arguments: { NAME: { type: "string" }, UNIT: { type: "number" } } },
+        { opcode: "Texture_BindCube", blockType: "command", text: "TextureCube [NAME] .bind([UNIT])", arguments: { NAME: { type: "string" }, UNIT: { type: "number" } } },
 
         { blockType: "label", text: "GL States" },
         { opcode: "gl_Clear", blockType: "command", text: "gl.clear([BIT])", arguments: { BIT: { type: "string", menu: "clearMenu" } } },
-        { opcode: "gl_SetClearColor", blockType: "command", text: "gl.clearColor(R:[R] G:[G] B:[B] A:[A])", arguments: { R: { type: "number" }, G: { type: "number" }, B: { type: "number" }, A: { type: "number" } } },
+        { opcode: "gl_SetClearColor", blockType: "command", text: "gl.clearColor([R] [G] [B] [A])", arguments: { R: { type: "number" }, G: { type: "number" }, B: { type: "number" }, A: { type: "number" } } },
         { opcode: "ST_Enable", blockType: "command", text: "gl.enable([CAP])", arguments: { CAP: { type: "string", menu: "capMenu" } } },
         { opcode: "ST_Disable", blockType: "command", text: "gl.disable([CAP])", arguments: { CAP: { type: "string", menu: "capMenu" } } },
         { opcode: "ST_CullFace", blockType: "command", text: "gl.cullFace [MODE]", arguments: { MODE: { type: "string", menu: "faceMenu", defaultValue: "BACK" } } },
@@ -84,5 +85,6 @@ export const EngineBlocks = [
         { opcode: "ST_StencilMask", blockType: "command", text: "gl.stencilMask [MASK]", arguments: { MASK: { type: "number", defaultValue: 255 } } },
         { opcode: "ST_StencilOp", blockType: "command", text: "gl.stencilOp [FACE] fail [SF] zfail [DF] zpass [DP]", arguments: { FACE: { type: "string", menu: "faceMenu", defaultValue: "FRONT_AND_BACK" }, SF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, DF: { type: "string", menu: "opMenu", defaultValue: "KEEP" }, DP: { type: "string", menu: "opMenu", defaultValue: "KEEP" } } },
         { opcode: "ST_StencilFunc", blockType: "command", text: "gl.stencilFunc [FACE] [FUNC] ref [REF] mask [MASK]", arguments: { FACE: { type: "string", menu: "faceMenu", defaultValue: "FRONT_AND_BACK" }, FUNC: { type: "string", menu: "funcMenu", defaultValue: "ALWAYS" }, REF: { type: "number", defaultValue: 0 }, MASK: { type: "number", defaultValue: 255 } } },
-
+        
+        "---", "---",
 ];

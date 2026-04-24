@@ -10,6 +10,7 @@ export const Math3DBlocks = [
     { opcode: "m4_Rotate", blockType: "reporter", text: "glm::rotate [M] [AXIS] [DEG]", arguments: { M: { type: "string" }, AXIS: { type: "string", menu: "axisMenu" }, DEG: { type: "number" } } },
     { opcode: "m4_Scale", blockType: "reporter", text: "glm::scale [M] X[X] Y[Y] Z[Z]", arguments: { M: { type: "string" }, X: { type: "number", defaultValue: 1 }, Y: { type: "number", defaultValue: 1 }, Z: { type: "number", defaultValue: 1 } } },
     { opcode: "m4_Multiply", blockType: "reporter", text: "glm:: [A] * [B]", arguments: { A: { type: "string" }, B: { type: "string" } } },
-    { opcode: "m4_Inverse", blockType: "reporter", text: "glm::inverse [M]", arguments: { M: { type: "string" } } }
-
+    { opcode: "m4_Inverse", blockType: "reporter", text: "glm::inverse [M]", arguments: { M: { type: "string" } } },
+    
+    "---","---",
 ];
