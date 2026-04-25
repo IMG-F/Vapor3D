@@ -1,0 +1,60 @@
+name: Node.js Build
+
+on:
+  push:
+    branches: [ "main" ]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./vapor3d-sdk
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: ./vapor3d-sdk
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Create timestamp
+        id: create_timestamp
+        run: echo "timestamp=$(date '+%Y-%m-%d-%H-%M-%S')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        if: ${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+        with:
+          files: dist/*.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send file to Release
+        uses: softprops/action-gh-release@v2
+        if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        with:
+          tag_name: snapshot-${{ steps.create_timestamp.outputs.timestamp }}
+          body: ${{ github.event.head_commit.message }}
+          draft: false
+          prerelease: true
+          files: dist/*.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
