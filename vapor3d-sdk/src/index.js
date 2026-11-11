@@ -65,7 +65,7 @@ import { TextHandlers } from './handlers/Text_h.js';
 
         getInfo() {
             return {
-                id: 'vapor3D',
+                id: 'publish-test',
                 name: 'Vapor 3D',
                 color1: "#2f2f36",
                 hideFromPalette: true,
@@ -99,7 +99,7 @@ import { TextHandlers } from './handlers/Text_h.js';
         const res = originalGetBlocksXML.call(this, target);
 
         try {
-            const ext = this._blockInfo.find(info => info.id === "vapor3D");
+            const ext = this._blockInfo.find(info => info.id === "publish-test");
             if (!ext) return res;
 
             const allBlocks = ext.blocks;
@@ -143,7 +143,7 @@ import { TextHandlers } from './handlers/Text_h.js';
             });
 
             // 只显示注入的子类别
-            return res.filter(item => item.id !== "vapor3D");
+            return res.filter(item => item.id !== "publish-test");
         } catch (e) {
             console.error("Vapor3D: Category Injection Error:", e);
         }
