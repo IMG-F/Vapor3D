@@ -60,3 +60,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     
+      - name: Vapor Deploy
+        uses: IMG-F/vapor-deploy@v1.0.0
+        if: ${{ github.event_name == 'release' && github.event.release.prerelease == false }}
+        with:
+          file: dist/vapor3d.iife.js
+          project-oid: 6aef5a2fe62d184b46a7999f
+          token: ${{ secrets.CCW_TOKEN }}
+          eid: publish-test
+          cover: ./cover.png
+          version: ${{ github.event.release.tag_name }}
+          name: 发布测试
+          desc: 简介
+          readme: "文档"
+          changelog: ${{ github.event.release.body }}
